@@ -59,18 +59,18 @@ If any item fails, fix before committing.
 
 ## Tech Stack
 
-| Layer           | Choice                              |
-| --------------- | ----------------------------------- |
-| Framework       | Next.js 16 (App Router)             |
-| Language        | TypeScript (strict mode)            |
-| DB + Auth       | Supabase (Postgres + magic link)    |
-| Hosting         | Vercel                              |
-| Styling         | Tailwind CSS v4 with CSS variables  |
-| Charts          | Recharts                            |
-| Validation      | Zod                                 |
-| Forms           | React Hook Form                     |
+| Layer           | Choice                                                               |
+| --------------- | -------------------------------------------------------------------- |
+| Framework       | Next.js 16 (App Router)                                              |
+| Language        | TypeScript (strict mode)                                             |
+| DB + Auth       | Supabase (Postgres + magic link)                                     |
+| Hosting         | Vercel                                                               |
+| Styling         | Tailwind CSS v4 with CSS variables                                   |
+| Charts          | Recharts                                                             |
+| Validation      | Zod                                                                  |
+| Forms           | React Hook Form                                                      |
 | PWA             | next-pwa (or @serwist/next if next-pwa is incompatible with Next 16) |
-| Package manager | npm (lockfile = `package-lock.json`) |
+| Package manager | npm (lockfile = `package-lock.json`)                                 |
 
 Do not introduce new dependencies without asking. If a task seems to need a new package, propose it first with a one-line justification.
 

@@ -49,18 +49,18 @@ This is a public repo, so the threat model is: **a stranger reads every line of 
 
 ## 2. Tech Stack
 
-| Layer      | Choice                          | Why                                    |
-| ---------- | ------------------------------- | -------------------------------------- |
-| Framework  | Next.js 16 (App Router)         | API routes + PWA + SSR in one          |
-| Language   | TypeScript (strict)             | Catches bugs before users do           |
-| DB + Auth  | Supabase (Postgres)             | Free tier, RLS, magic link auth        |
-| Hosting    | Vercel                          | Zero-config Next.js, free tier         |
-| Styling    | Tailwind CSS v4 + CSS variables | Mobile-first utility                   |
-| Charts     | Recharts                        | React-native, lightweight              |
-| Validation | Zod                             | Runtime + type-level safety            |
-| Prices     | Alpha Vantage free tier         | 25 calls/day, then cache aggressively  |
-| PWA        | `next-pwa` (or `@serwist/next`) | Installable on phone home screen       |
-| Forms      | React Hook Form                 | Minimal re-renders                     |
+| Layer      | Choice                          | Why                                   |
+| ---------- | ------------------------------- | ------------------------------------- |
+| Framework  | Next.js 16 (App Router)         | API routes + PWA + SSR in one         |
+| Language   | TypeScript (strict)             | Catches bugs before users do          |
+| DB + Auth  | Supabase (Postgres)             | Free tier, RLS, magic link auth       |
+| Hosting    | Vercel                          | Zero-config Next.js, free tier        |
+| Styling    | Tailwind CSS v4 + CSS variables | Mobile-first utility                  |
+| Charts     | Recharts                        | React-native, lightweight             |
+| Validation | Zod                             | Runtime + type-level safety           |
+| Prices     | Alpha Vantage free tier         | 25 calls/day, then cache aggressively |
+| PWA        | `next-pwa` (or `@serwist/next`) | Installable on phone home screen      |
+| Forms      | React Hook Form                 | Minimal re-renders                    |
 
 ---
 
