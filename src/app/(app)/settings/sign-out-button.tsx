@@ -17,7 +17,7 @@ export default function SignOutButton() {
         router.replace('/login');
         router.refresh();
       }}
-      className="self-start rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-900 disabled:opacity-50"
+      className="border-border text-muted hover:bg-foreground/5 hover:text-foreground self-start rounded border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
     >
       {pending ? 'Signing out…' : 'Sign out'}
     </button>

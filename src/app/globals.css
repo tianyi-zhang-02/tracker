@@ -3,14 +3,24 @@
 :root {
   --background: #0a0a0a;
   --foreground: #f5f1ea;
+  --muted: #a1a1aa;
+  --border: #27272a;
   --accent: #d4a574;
+  --positive: #7ab8a4;
+  --negative: #e08884;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
   --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+
+  --font-sans: var(--font-ibm-plex);
+  --font-serif: var(--font-fraunces);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -22,9 +32,19 @@ body {
 
 body {
   font-family: var(--font-sans), system-ui, sans-serif;
-  font-feature-settings: 'ss01';
   font-variant-numeric: tabular-nums;
+  /* iOS safe-area, used by the bottom nav. */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Step 4 will introduce a serif for headings and the warm-gold accent; the
-   variables above are the canonical names so component code can settle now. */
+/* Tabular figures for any number — apply via Tailwind's `.nums` utility. */
+.nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* Optical-size hint for Fraunces, used on hero numbers. */
+.serif-display {
+  font-family: var(--font-serif), Georgia, serif;
+  font-optical-sizing: auto;
+}

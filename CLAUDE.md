@@ -239,6 +239,7 @@ Don't make assumptions on any of these. Stop and ask the user:
 
 - Step 1 ✅ — repo scaffolded
 - Step 2 ✅ — schema committed at `supabase/schema.sql`, waiting on user to run it in Supabase dashboard
-- Step 3 ⏳ — auth (next up, after user confirms env vars are set)
+- Step 3 ✅ — magic-link auth (OTP + magic-link callback); code-complete but unverified end-to-end until env vars are provisioned
+- Step 4 ⏳ — layout shell (in progress)
 
 Update this section after every completed step.
