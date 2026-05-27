@@ -30,8 +30,18 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — NEVER commit. The only allowed env file is .env.example.
+.env
+.env.*
+!.env.example
+
+# editor / OS
+.idea/
+.vscode/
+*.swp
+
+# claude code local state (kept out of git for cleanliness)
+.claude/settings.local.json
 
 # vercel
 .vercel
