@@ -24,7 +24,7 @@ You'll need Node 20+, npm, a Supabase project, and an Alpha Vantage API key.
 
 ```bash
 # 1. Clone & install
-git clone https://github.com/yrqoeuqo123/tracker.git
+git clone https://github.com/tianyi-zhang-02/tracker.git
 cd tracker
 npm install
 
