@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -47,22 +48,32 @@ export default function AccountsClient({ initialAccounts }: { initialAccounts: A
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-muted text-xs">
           {initialAccounts.length} account{initialAccounts.length === 1 ? '' : 's'}
         </p>
-        {mode.kind === 'closed' ? (
-          <button
-            type="button"
-            onClick={() => {
-              setServerError(null);
-              setMode({ kind: 'create' });
-            }}
-            className="border-border hover:bg-foreground/5 rounded border px-3 py-1.5 text-xs"
-          >
-            + Add account
-          </button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {initialAccounts.length > 0 ? (
+            <Link
+              href="/accounts/update"
+              className="border-border hover:bg-foreground/5 rounded border px-3 py-1.5 text-xs"
+            >
+              Update balances
+            </Link>
+          ) : null}
+          {mode.kind === 'closed' ? (
+            <button
+              type="button"
+              onClick={() => {
+                setServerError(null);
+                setMode({ kind: 'create' });
+              }}
+              className="border-border hover:bg-foreground/5 rounded border px-3 py-1.5 text-xs"
+            >
+              + Add
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {mode.kind !== 'closed' ? (
@@ -90,12 +101,14 @@ export default function AccountsClient({ initialAccounts }: { initialAccounts: A
               key={account.id}
               className="border-border flex items-center justify-between rounded border p-4"
             >
-              <div className="min-w-0">
-                <p className="truncate text-base">{account.name}</p>
+              <Link href={`/accounts/${account.id}`} className="min-w-0 flex-1">
+                <p className="truncate text-base underline-offset-4 hover:underline">
+                  {account.name}
+                </p>
                 <p className="text-muted mt-0.5 text-[11px] tracking-wide uppercase">
                   {TYPE_LABELS[account.type]} · {account.currency}
                 </p>
-              </div>
+              </Link>
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"

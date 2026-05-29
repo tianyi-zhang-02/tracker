@@ -252,6 +252,8 @@ These are open issues from the Supabase Security Advisor / dev review. Don't fix
 - Step 3 ✅ — magic-link auth; proxy allowlists `/api/auth/send-otp` + `/api/auth/verify-otp`; 8-digit OTP form; client-only token schema so the empty-email field doesn't silently fail handleSubmit. End-to-end sign-in confirmed working.
 - Step 4 ✅ — layout shell (fonts, bottom nav, (app) route group, placeholder section pages)
 - Step 5 ✅ — accounts CRUD (API routes + list page + add/edit/archive form)
-- Step 6 ⏳ — transactions CRUD (in progress)
+- Step 6 ✅ — transactions CRUD (API routes, filterable list, add/edit/delete form, categories autocomplete)
+- Step 7 ✅ — snapshots (single + bulk month-end), /api/networth aggregator, 12-month Recharts line on dashboard, /accounts/:id drill-down with snapshot history
+- Step 8 ⏳ — savings goals (next up)
 
 Update this section after every completed step.
