@@ -271,7 +271,9 @@ describe('simulate — major expenses', () => {
 });
 
 describe('simulate — recurring expenses inflate', () => {
-  it('multiplies recurringAnnualExpenses by (1+inflation)^yearsElapsed', () => {
+  it('multiplies recurringAnnualExpenses by (1+inflation)^(i+1)', () => {
+    // Coherent end-of-year convention: row i values are nominal at T=i+1,
+    // so row 0 already shows one inflation period (input is today-dollars).
     const a = emptyAssumptions({
       horizonStartYear: 2030,
       horizonEndYear: 2032,
@@ -279,9 +281,9 @@ describe('simulate — recurring expenses inflate', () => {
       inflationPct: 3,
     });
     const { rows } = simulate(a);
-    expect(rows[0]!.expenses).toBeCloseTo(50_000, 2);
-    expect(rows[1]!.expenses).toBeCloseTo(50_000 * 1.03, 2);
-    expect(rows[2]!.expenses).toBeCloseTo(50_000 * 1.03 * 1.03, 2);
+    expect(rows[0]!.expenses).toBeCloseTo(50_000 * 1.03, 2);
+    expect(rows[1]!.expenses).toBeCloseTo(50_000 * Math.pow(1.03, 2), 2);
+    expect(rows[2]!.expenses).toBeCloseTo(50_000 * Math.pow(1.03, 3), 2);
   });
 });
 
