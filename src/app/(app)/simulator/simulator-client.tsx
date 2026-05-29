@@ -51,6 +51,8 @@ export default function SimulatorClient({
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [prefilling, setPrefilling] = useState(false);
+  const [prefillNote, setPrefillNote] = useState<string | null>(null);
 
   // Result recomputes whenever assumptions change. Pure math, fine on
   // every render — no debounce needed for typical horizon sizes.
@@ -143,6 +145,50 @@ export default function SimulatorClient({
       setServerError('Network error.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function prefillFromActuals() {
+    setPrefillNote(null);
+    setServerError(null);
+    setPrefilling(true);
+    try {
+      const [nwRes, cfRes] = await Promise.all([
+        fetch('/api/networth'),
+        fetch('/api/derived/cashflow'),
+      ]);
+      if (!nwRes.ok || !cfRes.ok) {
+        setServerError('Could not load your actual data.');
+        return;
+      }
+      const nw = (await nwRes.json()) as {
+        current: { total: number; invested?: number };
+      };
+      const cf = (await cfRes.json()) as {
+        summary: {
+          monthsObserved: number;
+          annualBaselineExpenses: number;
+          annualSavingsRatePct: number;
+        };
+      };
+      const total = Number.isFinite(nw.current.total) ? nw.current.total : 0;
+      const invested = Number.isFinite(nw.current.invested ?? NaN)
+        ? (nw.current.invested as number)
+        : 0;
+      setAssumptions((a) => ({
+        ...a,
+        startingNetWorth: total,
+        startingInvested: Math.max(0, Math.min(total, invested)),
+        recurringAnnualExpenses: Math.max(0, Math.round(cf.summary.annualBaselineExpenses)),
+        annualSavingsRatePct: Number(cf.summary.annualSavingsRatePct.toFixed(1)),
+      }));
+      setPrefillNote(
+        `Prefilled from your last ${cf.summary.monthsObserved} month${cf.summary.monthsObserved === 1 ? '' : 's'} of transactions.`,
+      );
+    } catch {
+      setServerError('Network error during prefill.');
+    } finally {
+      setPrefilling(false);
     }
   }
 
@@ -316,6 +362,17 @@ export default function SimulatorClient({
         <p className="text-muted nums mt-1 text-xs">
           {fmtCurrency0(lastReal)} in today&apos;s dollars · {fmtPct(totalGrowth)} over horizon
         </p>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={prefillFromActuals}
+            disabled={prefilling}
+            className="border-border hover:bg-foreground/5 rounded border px-3 py-1 text-xs disabled:opacity-50"
+          >
+            {prefilling ? 'Loading…' : 'Use my actual data'}
+          </button>
+          {prefillNote ? <span className="text-muted text-[10px]">{prefillNote}</span> : null}
+        </div>
       </section>
 
       {/* Chart + nominal/real toggle. */}
