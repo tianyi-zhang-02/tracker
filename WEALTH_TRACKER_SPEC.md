@@ -202,14 +202,16 @@ Bottom — recent transactions (last 10), with quick "+" button to add.
 - Top: portfolio total value, day change, all-time P/L
 - Refresh button to fetch latest prices (rate-limited UI feedback)
 
-### 4.7 Projections (`/projections`)
+### 4.7 Household Wealth Simulator (`/simulator`)
 
-Compound interest calculator and wealth projection:
+**Upgraded scope** — see `STEP_10_SIMULATOR_SPEC.md` in the repo root for the authoritative spec. Summary:
 
-- Inputs: starting amount (defaults to current net worth), monthly contribution (defaults to avg of last 6 months), annual return %, years
-- Output: line chart showing nominal balance over time + inflation-adjusted line (assume 3% default, editable)
-- Toggles for: "what if I save $X more per month", "what if returns are 4% vs 7% vs 10%"
-- A second mode: "When will I hit $X?" — solve for years given target amount
+- Interactive scenario planner: two-person career models with multiple career stages, windfalls, major expenses, savings rate, taxes, inflation, investment-return bands.
+- Scenarios are saved (`scenarios` table, jsonb assumptions) and named so the user can revisit and compare.
+- Pure-math simulation engine in `src/lib/simulator/engine.ts` (no DB, no network) — runs client-side and is unit-testable.
+- Career presets library (BigLaw, in-house, SWE, EM, medicine, etc.) to seed a stage.
+- UI at `/simulator`: scenario selector, collapsible assumptions form, Recharts net-worth chart with low/high band, year-by-year table, compare mode (overlay 2–3 scenarios).
+- Disclaimer baked in: estimates not advice; preset salaries are illustrative.
 
 ### 4.8 Export (`/settings/export`)
 
