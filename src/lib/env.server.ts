@@ -21,11 +21,14 @@ function readServer(name: string): string {
 
 type ServerEnv = {
   readonly SUPABASE_SERVICE_ROLE_KEY: string;
-  // ALPHA_VANTAGE_API_KEY is added in Step 9.
+  readonly ALPHAVANTAGE_API_KEY: string;
 };
 
 export const serverEnv: ServerEnv = {
   get SUPABASE_SERVICE_ROLE_KEY() {
     return readServer('SUPABASE_SERVICE_ROLE_KEY');
+  },
+  get ALPHAVANTAGE_API_KEY() {
+    return readServer('ALPHAVANTAGE_API_KEY');
   },
 };
