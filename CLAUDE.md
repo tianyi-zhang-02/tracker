@@ -158,7 +158,7 @@ Work through these in order. Each step ends in a commit + push. Do not jump ahea
 7. **Snapshots + Net Worth chart**
 8. **Savings Goals**
 9. **Holdings + Alpha Vantage proxy** ⚠️ security-sensitive — pause for user review
-10. **Projections**
+10. **Household Wealth Simulator** — upgraded scope, see `STEP_10_SIMULATOR_SPEC.md` in repo root for the authoritative spec (sub-steps, data model, engine signature, UI layout). Pause after engine + unit tests land.
 11. **Export**
 12. **PWA polish**
 13. **Security hardening pass** ⚠️ pause for user review

@@ -304,7 +304,7 @@ Each step is committable.
 7. **Snapshots + Net Worth chart** — bulk-update flow, dashboard chart
 8. **Savings Goals** — CRUD + progress UI
 9. **Holdings + Alpha Vantage proxy** — CRUD, price fetch with cache, portfolio screen
-10. **Projections** — calculator + chart, no persistence
+10. **Household Wealth Simulator** — see `STEP_10_SIMULATOR_SPEC.md`. Has its own sub-steps; pause after the engine + unit tests land so the math can be sanity-checked before the UI sits on top of it.
 11. **Export** — CSV + JSON download endpoints
 12. **PWA polish** — manifest, icons, service worker, lighthouse pass
 13. **Security hardening pass** — CSP headers, rate limiting on auth, input length limits, README security notes
