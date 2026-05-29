@@ -40,13 +40,20 @@ import type {
  *        and `saved = intendedContribution − shortfall`, which can go
  *        negative — that's a drawdown from the investment balance.
  *      - Windfalls always go straight to the balance, untaxed.
- *   7. **Inflation.** `recurringAnnualExpenses` is multiplied by
- *      `(1 + inflation)^yearsElapsed`. Salaries already grow via
- *      `annualRaisePct`, so do NOT add inflation on top of them — the
- *      raise number is meant to be NOMINAL (above-zero raise = real
- *      raise + inflation).
+ *   7. **Inflation — asymmetric convention.**
+ *      - Expenses are paid at the START of each simulation year, so the
+ *        recurringAnnualExpenses input is treated as the spend in
+ *        horizonStartYear: row 0 has no inflation factor, row N has
+ *        `(1+infl)^N`.
+ *      - Net worth is measured at the END of each year, one inflation
+ *        period later than the start. Real value at row N divides by
+ *        `(1+infl)^(N+1)`, so a 10-row horizon shows 10 years of
+ *        inflation against 10 years of growth.
+ *      - Salaries already grow via `annualRaisePct`; do NOT add
+ *        inflation on top — the raise input is NOMINAL.
  *   8. **Real (today-dollars) net worth.** `netWorthRealTodayDollars =
- *      netWorth / (1 + inflation)^yearsElapsed`.
+ *      netWorth / (1 + inflation)^(yearsElapsed + 1)` (see #7 for why
+ *      the `+1`).
  *
  * The engine is intentionally forgiving about unknown keys on the
  * `Assumptions` object — anything not enumerated below is ignored. This
@@ -107,8 +114,11 @@ function simulateScenario(a: Assumptions, returnPct: number): YearRow[] {
     const afterTaxIncome = grossIncome * (1 - a.effectiveTaxRatePct / 100);
 
     // 2. Expenses (recurring, inflated + active major-expense rows).
-    const inflationFactor = Math.pow(1 + a.inflationPct / 100, yearsElapsed);
-    const baselineExpenses = a.recurringAnnualExpenses * inflationFactor;
+    // Convention: expenses occur at the START of the simulation year, so row 0
+    // uses recurringAnnualExpenses with no inflation applied (the user-supplied
+    // value IS the horizonStartYear spend). Subsequent years compound.
+    const expenseInflationFactor = Math.pow(1 + a.inflationPct / 100, yearsElapsed);
+    const baselineExpenses = a.recurringAnnualExpenses * expenseInflationFactor;
     let majorExpensesThisYear = 0;
     for (const e of a.majorExpenses) majorExpensesThisYear += amountForYear(e, year);
     const expenses = baselineExpenses + majorExpensesThisYear;
@@ -133,7 +143,13 @@ function simulateScenario(a: Assumptions, returnPct: number): YearRow[] {
     balance = balance + investmentGrowth + saved + windfalls;
 
     const netWorth = balance;
-    const netWorthRealTodayDollars = netWorth / inflationFactor;
+    // Real value is measured at the END of the simulation year, so one
+    // additional inflation period has elapsed since the row's expense
+    // factor was applied. A 10-row horizon therefore deflates by
+    // (1+infl)^10 at the last row, matching the standard "10 years of
+    // inflation across 10 years of growth" expectation.
+    const realDeflationFactor = Math.pow(1 + a.inflationPct / 100, yearsElapsed + 1);
+    const netWorthRealTodayDollars = netWorth / realDeflationFactor;
 
     rows.push({
       year,

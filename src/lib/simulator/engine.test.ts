@@ -57,10 +57,30 @@ describe('simulate — inflation', () => {
     });
     const { rows } = simulate(a);
     expect(rows[0]!.netWorth).toBe(100_000);
-    // yearsElapsed at row 0 = 0 → factor = 1
-    expect(rows[0]!.netWorthRealTodayDollars).toBe(100_000);
-    // yearsElapsed at row 1 = 1 → factor = 1.03
-    expect(rows[1]!.netWorthRealTodayDollars).toBeCloseTo(100_000 / 1.03, 2);
+    // Asymmetric convention: real value is measured at END of year, so
+    // even row 0 (the first simulation year) shows one period of inflation.
+    expect(rows[0]!.netWorthRealTodayDollars).toBeCloseTo(100_000 / 1.03, 2);
+    expect(rows[1]!.netWorthRealTodayDollars).toBeCloseTo(100_000 / Math.pow(1.03, 2), 2);
+  });
+
+  it('deflates a 10-row horizon by exactly (1+infl)^10 at the last row', () => {
+    // The case-3 sanity check: $100k starting, 7% return, 3% inflation,
+    // 10-year horizon. Nominal should be 100k * 1.07^10, real should be
+    // that divided by 1.03^10.
+    const a = emptyAssumptions({
+      horizonStartYear: 2026,
+      horizonEndYear: 2035,
+      startingNetWorth: 100_000,
+      investment: { returnPct: 7, returnPctLow: 7, returnPctHigh: 7 },
+      inflationPct: 3,
+    });
+    const { rows } = simulate(a);
+    const lastRow = rows[rows.length - 1]!;
+    expect(lastRow.netWorth).toBeCloseTo(100_000 * Math.pow(1.07, 10), 0);
+    expect(lastRow.netWorthRealTodayDollars).toBeCloseTo(
+      (100_000 * Math.pow(1.07, 10)) / Math.pow(1.03, 10),
+      0,
+    );
   });
 });
 
