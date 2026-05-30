@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import NetWorthChart, { type ChartPoint } from '@/components/charts/net-worth-chart';
 import { computeNetWorth } from '@/lib/derived/networth';
+import { formatCurrency, formatDate } from '@/lib/format/money';
 import { getServerSupabase, getAuthedUser } from '@/lib/supabase/server';
 import type { TransactionKind } from '@/lib/validation/transactions';
 
@@ -20,25 +21,6 @@ const TONE_BY_KIND: Record<TransactionKind, string> = {
   savings_deposit: 'text-muted',
   savings_withdrawal: 'text-muted',
 };
-
-function fmtCurrency(n: number, withCents = false): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: withCents ? 2 : 0,
-  }).format(n);
-}
-
-function fmtDate(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return iso;
-  const sameYear = d.getFullYear() === new Date().getFullYear();
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: sameYear ? undefined : 'numeric',
-  }).format(d);
-}
 
 export default async function DashboardPage() {
   const user = await getAuthedUser();
@@ -92,14 +74,14 @@ export default async function DashboardPage() {
       <header className="space-y-2">
         <p className="text-muted text-[11px] tracking-[0.2em] uppercase">Net worth</p>
         <p className="serif-display text-foreground nums text-5xl">
-          {hasAnyValue ? fmtCurrency(total) : '$ —'}
+          {hasAnyValue ? formatCurrency(total) : '$ —'}
         </p>
         {hasAnyValue ? (
           <Link
             href="/transactions"
             className={`nums hover:underline-offset-4 hover:underline text-xs ${deltaTone}`}
           >
-            {deltaSign} {fmtCurrency(Math.abs(delta))} this month →
+            {deltaSign} {formatCurrency(Math.abs(delta))} this month →
           </Link>
         ) : (
           <p className="text-muted text-xs">
@@ -114,12 +96,12 @@ export default async function DashboardPage() {
       <section className="grid grid-cols-2 gap-3">
         <Stat
           label="Liquid"
-          value={hasAnyValue ? fmtCurrency(liquid) : '$ —'}
+          value={hasAnyValue ? formatCurrency(liquid) : '$ —'}
           href="/accounts"
         />
         <Stat
           label="Invested"
-          value={hasAnyValue ? fmtCurrency(invested) : '$ —'}
+          value={hasAnyValue ? formatCurrency(invested) : '$ —'}
           href="/portfolio"
         />
       </section>
@@ -164,7 +146,7 @@ export default async function DashboardPage() {
                     </p>
                   </div>
                   <span className="text-muted nums shrink-0 text-[11px]">
-                    {fmtDate(tx.occurred_on)}
+                    {formatDate(tx.occurred_on)}
                   </span>
                 </li>
               );
@@ -174,7 +156,7 @@ export default async function DashboardPage() {
       </section>
 
       {mostRecent ? (
-        <p className="text-muted text-[10px]">As of last snapshot · {fmtDate(mostRecent)}</p>
+        <p className="text-muted text-[10px]">As of last snapshot · {formatDate(mostRecent)}</p>
       ) : null}
     </main>
   );

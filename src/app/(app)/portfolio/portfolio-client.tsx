@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
+import { useToast } from '@/components/ui/toast';
+import { formatCurrency, formatQty } from '@/lib/format/money';
 import type { Account } from '@/lib/types/account';
 import type { HoldingWithAccount, Quote } from '@/lib/types/holding';
 import {
@@ -25,24 +27,6 @@ type FormMode =
   | { kind: 'closed' }
   | { kind: 'create' }
   | { kind: 'edit'; holding: HoldingWithAccount };
-
-function fmtMoney(n: number, currency: string, withCents = true): string {
-  if (!Number.isFinite(n)) return '—';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    currencyDisplay: 'narrowSymbol',
-    maximumFractionDigits: withCents ? 2 : 0,
-  }).format(n);
-}
-
-function fmtQty(n: number): string {
-  if (!Number.isFinite(n)) return '—';
-  return new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: 8,
-    minimumFractionDigits: 0,
-  }).format(n);
-}
 
 function fmtFetchedAt(iso: string): string {
   const d = new Date(iso);
@@ -64,6 +48,7 @@ export default function PortfolioClient({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const toast = useToast();
   // Bottom-nav "+" sheet jumps here with ?add=1 to deep-link "Add holding."
   // Initialise the form state from the URL on first render; the effect below
   // strips the param.
@@ -72,7 +57,6 @@ export default function PortfolioClient({
       ? { kind: 'create' }
       : { kind: 'closed' },
   );
-  const [serverError, setServerError] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<Record<string, Quote | null>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
@@ -97,7 +81,7 @@ export default function PortfolioClient({
         const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`);
         if (!res.ok) {
           if (!cancelled)
-            setServerError(
+            toast.error(
               res.status === 429 ? 'Quote rate limit hit — try later.' : 'Could not load prices.',
             );
           return;
@@ -108,7 +92,7 @@ export default function PortfolioClient({
           setRefreshedAt(new Date().toISOString());
         }
       } catch {
-        if (!cancelled) setServerError('Network error fetching prices.');
+        if (!cancelled) toast.error('Network error fetching prices.');
       } finally {
         if (!cancelled) setRefreshing(false);
       }
@@ -116,16 +100,16 @@ export default function PortfolioClient({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbols]);
 
   async function refreshPrices() {
     if (symbols.length === 0 || refreshing) return;
     setRefreshing(true);
-    setServerError(null);
     try {
       const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`);
       if (!res.ok) {
-        setServerError(
+        toast.error(
           res.status === 429 ? 'Quote rate limit hit — try later.' : 'Could not refresh prices.',
         );
         return;
@@ -133,8 +117,9 @@ export default function PortfolioClient({
       const json = (await res.json()) as { quotes: Record<string, Quote | null> };
       setQuotes(json.quotes ?? {});
       setRefreshedAt(new Date().toISOString());
+      toast.success('Prices updated.');
     } catch {
-      setServerError('Network error refreshing prices.');
+      toast.error('Network error refreshing prices.');
     } finally {
       setRefreshing(false);
     }
@@ -145,9 +130,10 @@ export default function PortfolioClient({
     startDelete(async () => {
       const res = await fetch(`/api/holdings/${h.id}`, { method: 'DELETE' });
       if (!res.ok) {
-        setServerError('Could not delete. Try again.');
+        toast.error('Could not delete. Try again.');
         return;
       }
+      toast.success(`Removed ${h.symbol}.`);
       router.refresh();
     });
   }
@@ -196,7 +182,7 @@ export default function PortfolioClient({
       <section className="border-border rounded border p-4">
         <p className="text-muted text-[10px] tracking-[0.18em] uppercase">Total market value</p>
         <p className="serif-display nums mt-1 text-3xl">
-          {anyValued ? fmtMoney(totalValue, 'USD', false) : '—'}
+          {anyValued ? formatCurrency(totalValue) : '—'}
         </p>
         {anyValued ? (
           <p
@@ -205,7 +191,7 @@ export default function PortfolioClient({
             }`}
           >
             {totalPL > 0 ? '+' : totalPL < 0 ? '−' : ''}
-            {fmtMoney(Math.abs(totalPL), 'USD', false)} ({totalPLPct.toFixed(1)}%) all-time
+            {formatCurrency(Math.abs(totalPL))} ({totalPLPct.toFixed(1)}%) all-time
           </p>
         ) : (
           <p className="text-muted mt-1 text-xs">Add holdings to see live valuation.</p>
@@ -233,10 +219,7 @@ export default function PortfolioClient({
         {mode.kind === 'closed' ? (
           <button
             type="button"
-            onClick={() => {
-              setServerError(null);
-              setMode({ kind: 'create' });
-            }}
+            onClick={() => setMode({ kind: 'create' })}
             disabled={accounts.length === 0}
             className="border-border hover:bg-foreground/5 rounded border px-3 py-1.5 text-xs disabled:opacity-50"
           >
@@ -250,15 +233,14 @@ export default function PortfolioClient({
           mode={mode}
           accounts={accounts}
           onCancel={() => setMode({ kind: 'closed' })}
-          onSaved={() => {
+          onSaved={(symbol, isEdit) => {
             setMode({ kind: 'closed' });
+            toast.success(isEdit ? `Updated ${symbol}.` : `Added ${symbol}.`);
             router.refresh();
           }}
-          onError={setServerError}
+          onError={toast.error}
         />
       ) : null}
-
-      {serverError ? <p className="text-negative text-xs">{serverError}</p> : null}
 
       {/* Holdings grouped by account */}
       {initialHoldings.length === 0 ? (
@@ -294,7 +276,7 @@ export default function PortfolioClient({
                       }`}
                     >
                       {subPL > 0 ? '+' : subPL < 0 ? '−' : ''}
-                      {fmtMoney(Math.abs(subPL), 'USD', false)}
+                      {formatCurrency(Math.abs(subPL))}
                     </p>
                   ) : null}
                 </div>
@@ -312,13 +294,13 @@ export default function PortfolioClient({
                           </span>
                         </div>
                         <p className="text-muted nums mt-1 text-[11px]">
-                          {fmtQty(r.qty)} · {r.price !== null ? fmtMoney(r.price, 'USD') : '—'} ea ·
-                          cost {fmtMoney(r.cost, 'USD', false)}
+                          {formatQty(r.qty)} · {r.price !== null ? formatCurrency(r.price, { withCents: true }) : '—'} ea ·
+                          cost {formatCurrency(r.cost)}
                         </p>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1">
                         <span className="nums text-sm">
-                          {r.value !== null ? fmtMoney(r.value, 'USD', false) : '—'}
+                          {r.value !== null ? formatCurrency(r.value) : '—'}
                         </span>
                         {r.pl !== null ? (
                           <span
@@ -327,17 +309,14 @@ export default function PortfolioClient({
                             }`}
                           >
                             {r.pl > 0 ? '+' : r.pl < 0 ? '−' : ''}
-                            {fmtMoney(Math.abs(r.pl), 'USD', false)}{' '}
+                            {formatCurrency(Math.abs(r.pl))}{' '}
                             {r.plPct !== null ? `(${r.plPct.toFixed(1)}%)` : ''}
                           </span>
                         ) : null}
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => {
-                              setServerError(null);
-                              setMode({ kind: 'edit', holding: r.h });
-                            }}
+                            onClick={() => setMode({ kind: 'edit', holding: r.h })}
                             className="text-muted hover:text-foreground text-[11px]"
                           >
                             Edit
@@ -379,8 +358,8 @@ function HoldingForm({
   mode: Exclude<FormMode, { kind: 'closed' }>;
   accounts: Account[];
   onCancel: () => void;
-  onSaved: () => void;
-  onError: (msg: string | null) => void;
+  onSaved: (symbol: string, isEdit: boolean) => void;
+  onError: (msg: string) => void;
 }) {
   const editing = mode.kind === 'edit' ? mode.holding : null;
   const isEdit = !!editing;
@@ -397,7 +376,6 @@ function HoldingForm({
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
-    onError(null);
     const endpoint = isEdit ? `/api/holdings/${editing.id}` : '/api/holdings';
     const method = isEdit ? 'PATCH' : 'POST';
     const res = await fetch(endpoint, {
@@ -409,7 +387,7 @@ function HoldingForm({
       onError(isEdit ? 'Could not save changes. Try again.' : 'Could not add holding. Try again.');
       return;
     }
-    onSaved();
+    onSaved(values.symbol.toUpperCase(), isEdit);
   });
 
   if (accounts.length === 0) {

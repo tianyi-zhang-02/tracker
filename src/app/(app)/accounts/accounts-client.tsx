@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
+import { useToast } from '@/components/ui/toast';
+import { formatCurrency } from '@/lib/format/money';
 import {
   ACCOUNT_TYPES,
   createAccountSchema,
@@ -31,15 +33,6 @@ export type AccountBalanceMap = Record<
 
 type Totals = { total: number; liquid: number; invested: number };
 
-function fmtCurrency(n: number, currency: string, withCents = false): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    currencyDisplay: 'narrowSymbol',
-    maximumFractionDigits: withCents ? 2 : 0,
-  }).format(n);
-}
-
 export default function AccountsClient({
   initialAccounts,
   balanceMap,
@@ -51,13 +44,13 @@ export default function AccountsClient({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const toast = useToast();
   // Bottom-nav "+" sheet jumps here with ?add=1 to deep-link "Add account."
   // Initialise the form state from the URL on first render, then the effect
   // below strips the param so a refresh doesn't keep re-popping the form.
   const [mode, setMode] = useState<FormMode>(() =>
     searchParams.get('add') === '1' ? { kind: 'create' } : { kind: 'closed' },
   );
-  const [serverError, setServerError] = useState<string | null>(null);
   const [pendingArchive, startArchive] = useTransition();
 
   useEffect(() => {
@@ -73,9 +66,10 @@ export default function AccountsClient({
     startArchive(async () => {
       const res = await fetch(`/api/accounts/${account.id}`, { method: 'DELETE' });
       if (!res.ok) {
-        setServerError('Could not archive account. Try again.');
+        toast.error('Could not archive account. Try again.');
         return;
       }
+      toast.success(`Archived ${account.name}.`);
       refresh();
     });
   }
@@ -89,10 +83,9 @@ export default function AccountsClient({
       {hasAnyValue ? (
         <section className="border-border rounded border p-4">
           <p className="text-muted text-[10px] tracking-[0.18em] uppercase">Total</p>
-          <p className="serif-display nums mt-1 text-2xl">{fmtCurrency(totals.total, 'USD')}</p>
+          <p className="serif-display nums mt-1 text-2xl">{formatCurrency(totals.total)}</p>
           <p className="text-muted nums mt-1 text-[11px]">
-            Liquid {fmtCurrency(totals.liquid, 'USD')} · Invested{' '}
-            {fmtCurrency(totals.invested, 'USD')}
+            Liquid {formatCurrency(totals.liquid)} · Invested {formatCurrency(totals.invested)}
           </p>
         </section>
       ) : null}
@@ -113,10 +106,7 @@ export default function AccountsClient({
           {mode.kind === 'closed' ? (
             <button
               type="button"
-              onClick={() => {
-                setServerError(null);
-                setMode({ kind: 'create' });
-              }}
+              onClick={() => setMode({ kind: 'create' })}
               className="border-border hover:bg-foreground/5 rounded border px-3 py-1.5 text-xs"
             >
               + Add
@@ -129,15 +119,14 @@ export default function AccountsClient({
         <AccountForm
           mode={mode}
           onCancel={() => setMode({ kind: 'closed' })}
-          onSaved={() => {
+          onSaved={(name, isEdit) => {
             setMode({ kind: 'closed' });
+            toast.success(isEdit ? `Updated ${name}.` : `Added ${name}.`);
             refresh();
           }}
-          onError={setServerError}
+          onError={toast.error}
         />
       ) : null}
-
-      {serverError ? <p className="text-negative text-xs">{serverError}</p> : null}
 
       {initialAccounts.length === 0 ? (
         <div className="border-border text-muted rounded border border-dashed p-6 text-center text-sm">
@@ -164,16 +153,13 @@ export default function AccountsClient({
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <p className="nums text-sm">
                     {bal && bal.source !== 'none'
-                      ? fmtCurrency(bal.value, account.currency)
+                      ? formatCurrency(bal.value, { currency: account.currency })
                       : '—'}
                   </p>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setServerError(null);
-                        setMode({ kind: 'edit', account });
-                      }}
+                      onClick={() => setMode({ kind: 'edit', account })}
                       className="text-muted hover:text-foreground text-xs"
                     >
                       Edit
@@ -205,8 +191,8 @@ function AccountForm({
 }: {
   mode: Exclude<FormMode, { kind: 'closed' }>;
   onCancel: () => void;
-  onSaved: () => void;
-  onError: (msg: string | null) => void;
+  onSaved: (name: string, isEdit: boolean) => void;
+  onError: (msg: string) => void;
 }) {
   const editing = mode.kind === 'edit' ? mode.account : null;
   const form = useForm<CreateAccountInput>({
@@ -219,8 +205,6 @@ function AccountForm({
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
-    onError(null);
-
     if (editing) {
       // Edit only updates name for now — type/currency stay locked to keep
       // historical snapshots consistent.
@@ -233,6 +217,7 @@ function AccountForm({
         onError('Could not save changes. Try again.');
         return;
       }
+      onSaved(values.name, true);
     } else {
       const res = await fetch('/api/accounts', {
         method: 'POST',
@@ -243,8 +228,8 @@ function AccountForm({
         onError('Could not create account. Try again.');
         return;
       }
+      onSaved(values.name, false);
     }
-    onSaved();
   });
 
   return (
