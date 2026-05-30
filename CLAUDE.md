@@ -261,6 +261,7 @@ These are open issues from the Supabase Security Advisor / dev review. Don't fix
 - Step 10 ✅ — wealth simulator (10.1 schema + 10.2 CRUD + 10.3 engine + 10.4 form + 10.5 chart + 10.6 table + 10.7 save/load/duplicate/delete + 10.8 compare + 10.9 prefill). Engine: coherent end-of-year convention (T=i+1 nominal for everything in row i); same `expenseInflationFactor` variable feeds the real-net-worth deflation. 24 passing tests including 3 sanity cases + 2 coherence proofs. Cashflow derivation lives at `src/lib/derived/cashflow.ts` for polish-phase reuse.
 - Step 11 ✅ — export endpoints (CSV transactions, CSV holdings, full JSON backup); /settings/export page with three download cards
 - Step 12 ✅ — PWA polish: manifest.ts + ImageResponse-generated icons (32/180/192/512) + hand-rolled service worker (no new deps); proxy allowlists the install endpoints; iOS apple-web-app meta + format-detection disabled
-- Polish phase ⏳ — see INTEGRATION_POLISH_SPEC.md, branch `polish/integration`
+- Polish phase ✅ — merged to main via PR #1 (`--no-ff`, merge SHA `1dd518a`). §1 canonical net-worth helper (`src/lib/derived/networth.ts`, snapshot-authoritative + live-holdings-fill); §2 cross-feature navigation (plus-menu bottom sheet, deep-link `?add=1` entry points); §3 unified interaction patterns (`src/components/ui/toast.tsx`, `src/lib/format/money.ts`); §4 visual consolidation (lucide-react icons, accent active tab). Post-merge security re-audit grep clean; dashboard net-worth unchanged from hand-verified figure.
+- Step 13 ⏳ — security hardening pass. ⚠️ pause for user review. Three known-debt items live in the "Known security debt" section above.
 
 Update this section after every completed step.
