@@ -93,3 +93,9 @@ Apply the design tokens already in `CLAUDE.md` consistently, and raise the bar f
 7. Open a PR. Pause for review before merging to `main`.
 
 **Pause after Section 1 specifically** — if net worth computation gets refactored, the user wants to re-verify the number against their own math before more changes pile on.
+
+---
+
+## Open questions to settle at the start of the polish pass
+
+- **Backup importer — restore-to-DB?** The current `/settings/export` decrypts and previews row counts, but does NOT write back to Supabase. The original spec said "no official importer," but the user asked during Step 11 verification to flag this as a decision point. If we add a real importer, it'd live alongside the decrypt flow on the same page, would need a zod-validated "merge vs replace" choice, and is arguably a new feature (out of polish-pass scope). Default if not raised: leave decrypt-to-view as-is.
