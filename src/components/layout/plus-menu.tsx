@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-
-import { PlusIcon } from './nav-icons';
+import { Plus } from 'lucide-react';
 
 /**
  * Context-aware "+" button. Replaces the raised center nav anchor — instead
@@ -51,7 +50,7 @@ export default function PlusMenu() {
         onClick={() => setOpen(true)}
         className="bg-accent text-background absolute -top-7 flex h-14 w-14 items-center justify-center rounded-full shadow-lg shadow-black/40 ring-1 ring-black/20 transition hover:brightness-110 active:scale-95"
       >
-        <PlusIcon />
+        <Plus size={24} strokeWidth={2} aria-hidden="true" />
       </button>
 
       {open ? (
