@@ -1,8 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { CAREER_PRESETS } from '@/lib/simulator/career-presets';
+import {
+  ROLE_PRESETS,
+  searchRolePresets,
+  type RolePreset,
+} from '@/lib/simulator/rolePresets';
 import type {
   Assumptions,
   CareerStage,
@@ -124,6 +129,79 @@ function NumField({
         {suffix ? <span className="text-muted text-xs">{suffix}</span> : null}
       </div>
     </label>
+  );
+}
+
+/**
+ * Inline role-library search for a career stage. The user types a query;
+ * matching roles render as a small clickable list. Clicking one fills
+ * baseSalary / annualRaisePct / bonusPct on the stage; everything stays
+ * editable afterward.
+ *
+ * Deliberately stateless about "which role was picked" — once applied,
+ * the stage is just a stage, not a tagged preset. The library is a
+ * starting point, not a category. This matches the disclaimer the UI
+ * surfaces ("starting estimates, replace with your own figures") — you
+ * should never be able to tell, after editing, that someone "is" still
+ * the BigLaw associate preset.
+ */
+function RoleSearchBox({
+  onPick,
+}: {
+  onPick: (preset: RolePreset) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+
+  // Memoized so typing doesn't repeatedly re-filter on identical inputs.
+  const results = useMemo(() => searchRolePresets(query).slice(0, 8), [query]);
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        // Delay blur close so an onClick on a result can fire first.
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        placeholder={`Search ${ROLE_PRESETS.length} starting roles (e.g. "biglaw", "L5", "MLE")…`}
+        className="border-border focus:border-foreground placeholder:text-muted/50 w-full rounded border bg-transparent px-3 py-2 text-xs outline-none"
+      />
+      {open && results.length > 0 ? (
+        <ul
+          className="border-border bg-background absolute top-full right-0 left-0 z-10 mt-1 max-h-64 overflow-auto rounded border shadow-lg"
+          role="listbox"
+        >
+          {results.map((r) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                // onMouseDown fires before the input's onBlur, so the pick
+                // lands before the dropdown collapses.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onPick(r);
+                  setQuery('');
+                  setOpen(false);
+                }}
+                className="hover:bg-foreground/5 flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left"
+              >
+                <span className="text-foreground text-xs">{r.title}</span>
+                <span className="text-muted text-[10px]">
+                  {r.track === 'legal' ? 'Legal' : 'SWE / MLE'} · ${r.baseSalary.toLocaleString()}
+                  /yr base · +{r.annualRaisePct}% raise · {r.bonusPct}% bonus
+                </span>
+                {r.notes ? <span className="text-muted text-[10px] italic">{r.notes}</span> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -413,6 +491,23 @@ export default function AssumptionsForm({
                 <ul className="mt-3 flex flex-col gap-2">
                   {p.careerStages.map((s, i) => (
                     <li key={i} className="border-border rounded border p-3">
+                      <div className="mb-3 flex flex-col gap-1">
+                        <span className="text-muted text-[10px] tracking-[0.18em] uppercase">
+                          Role library
+                        </span>
+                        <RoleSearchBox
+                          onPick={(preset) =>
+                            patchStage(p.id, i, {
+                              baseSalary: preset.baseSalary,
+                              annualRaisePct: preset.annualRaisePct,
+                              bonusPct: preset.bonusPct,
+                            })
+                          }
+                        />
+                        <span className="text-muted text-[10px] italic">
+                          Starting estimates — replace with your own figures.
+                        </span>
+                      </div>
                       <div className="grid grid-cols-2 gap-3">
                         <TextField
                           label="Label"
