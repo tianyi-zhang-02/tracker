@@ -29,7 +29,7 @@ This is a **public GitHub repo**. Assume a hostile stranger reads every commit. 
 3. **Run `git status` before every `git add`.** If you see `.env`, `.env.local`, or anything that looks like a secret file, stop and tell the user.
 4. **If a secret is needed in a client component, that's a design error.** Route the call through a Next.js API route so the secret stays server-side. Never use `NEXT_PUBLIC_` for anything sensitive — that prefix exposes the value to the browser bundle.
 5. **The `SUPABASE_SERVICE_ROLE_KEY` is server-only.** It must only appear in files under `src/app/api/` or `src/lib/supabase/server.ts`. If it shows up anywhere a client component could import, that's a bug.
-6. **The `ALPHA_VANTAGE_API_KEY` is server-only.** Same rule.
+6. **The `ALPHAVANTAGE_API_KEY` is server-only.** Same rule. (Exact name: no underscore between `ALPHA` and `VANTAGE` — matches `src/lib/env.server.ts` and `.env.example`.)
 
 ### Architecture security
 
