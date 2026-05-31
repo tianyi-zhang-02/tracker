@@ -1,0 +1,312 @@
+'use client';
+
+import { useState } from 'react';
+
+import {
+  solveGoalSeek,
+  type GoalSeekResult,
+  type SolveResult,
+} from '@/lib/simulator/goalSeek';
+import type { Assumptions, SimTarget } from '@/lib/validation/scenarios';
+
+/**
+ * Goal-seek display panel. Spec contract:
+ *
+ *   - When target is absent: surface a small "set a target to enable" hint
+ *     so the feature is discoverable but doesn't shout.
+ *   - When already on track: celebrate the surplus, don't compute levers.
+ *   - When short: compute all 4 levers and display them side by side.
+ *
+ * Computation runs on demand (button + manual recalc) rather than every
+ * keystroke — bisection is cheap individually but four levers × 40 iters
+ * × an engine run each is enough to feel jittery if recomputed on every
+ * input change while the user is typing.
+ *
+ * Copy convention (spec):
+ *   - Conditional ("saving $X/mo more would reach the target") not
+ *     instructional ("you should save more").
+ *   - Honest about "not reachable" cases ("not reachable by spending
+ *     alone") instead of returning a misleading boundary value.
+ */
+function fmtMoney(n: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(Math.round(n));
+}
+
+function fmtMoneyDelta(n: number): string {
+  const abs = Math.abs(n);
+  const formatted = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(Math.round(abs));
+  return `${n >= 0 ? '+' : '−'}${formatted}`;
+}
+
+function fmtPct(n: number, digits = 1): string {
+  return `${n.toFixed(digits)}%`;
+}
+
+function fmtYears(n: number): string {
+  if (Math.abs(n) < 0.05) return '0 yrs';
+  return `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(1)} yrs`;
+}
+
+function NumField({
+  label,
+  value,
+  onChange,
+  step = 1,
+  min,
+  max,
+  suffix,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+  step?: number;
+  min?: number;
+  max?: number;
+  suffix?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft !== null ? draft : value === 0 ? '' : String(value);
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-muted text-xs">{label}</span>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          inputMode="decimal"
+          value={display}
+          placeholder="0"
+          step={step}
+          min={min}
+          max={max}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => {
+            const t = e.target.value;
+            setDraft(t);
+            if (t.trim() === '') return;
+            const n = Number(t);
+            if (Number.isFinite(n)) onChange(n);
+          }}
+          onBlur={() => {
+            if (draft !== null) {
+              const trimmed = draft.trim();
+              if (trimmed === '' || !Number.isFinite(Number(trimmed))) {
+                onChange(0);
+              }
+              setDraft(null);
+            }
+          }}
+          className="border-border focus:border-foreground nums w-full rounded border bg-transparent px-3 py-2 text-base outline-none"
+        />
+        {suffix ? <span className="text-muted text-xs">{suffix}</span> : null}
+      </div>
+    </label>
+  );
+}
+
+function LeverRow({
+  label,
+  result,
+  formatValue,
+  formatDelta,
+}: {
+  label: string;
+  result: SolveResult;
+  formatValue: (v: number) => string;
+  formatDelta: (d: number) => string;
+}) {
+  return (
+    <li className="border-border flex items-start justify-between gap-3 rounded border px-3 py-2">
+      <span className="text-foreground text-xs">{label}</span>
+      {result.ok ? (
+        <span className="text-muted nums text-right text-xs">
+          <span className="text-foreground">{formatValue(result.value)}</span>{' '}
+          <span className="text-muted">({formatDelta(result.delta)})</span>
+        </span>
+      ) : (
+        <span className="text-muted text-right text-[11px] italic">{result.reason}</span>
+      )}
+    </li>
+  );
+}
+
+export default function GoalSeekPanel({
+  assumptions,
+  onChange,
+}: {
+  assumptions: Assumptions;
+  onChange: (next: Assumptions) => void;
+}) {
+  const [result, setResult] = useState<GoalSeekResult | null>(null);
+  const hasTarget = !!assumptions.target;
+  const hasPeople = assumptions.people.length > 0;
+
+  function setTarget(next: SimTarget | undefined) {
+    onChange({ ...assumptions, target: next });
+  }
+
+  function recompute() {
+    setResult(solveGoalSeek(assumptions));
+  }
+
+  return (
+    <section className="border-border rounded border p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-muted text-[10px] tracking-[0.18em] uppercase">Goal-seek target</p>
+        <button
+          type="button"
+          onClick={() => {
+            if (hasTarget) {
+              setTarget(undefined);
+              setResult(null);
+            } else {
+              setTarget({ amount: 5_000_000, age: 50 });
+              setResult(null);
+            }
+          }}
+          className="text-muted hover:text-foreground text-[11px]"
+        >
+          {hasTarget ? 'Clear target' : 'Set a target'}
+        </button>
+      </div>
+
+      {!hasTarget ? (
+        <p className="text-muted mt-2 text-xs">
+          Set a target net worth at an age (e.g. $5M by 50) and the simulator
+          will show how much each lever — savings, return, spending, or time —
+          would have to change on its own to get there.
+        </p>
+      ) : !hasPeople ? (
+        <p className="text-muted mt-2 text-xs italic">
+          Add at least one person under &ldquo;People &amp; careers&rdquo; so the
+          target age can resolve to a year.
+        </p>
+      ) : (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <NumField
+              label="Target amount"
+              value={assumptions.target!.amount}
+              step={50_000}
+              min={0}
+              suffix="$"
+              onChange={(n) =>
+                setTarget({ amount: Math.max(0, n), age: assumptions.target!.age })
+              }
+            />
+            <NumField
+              label="By age"
+              value={assumptions.target!.age}
+              step={1}
+              min={0}
+              max={120}
+              onChange={(n) =>
+                setTarget({
+                  amount: assumptions.target!.amount,
+                  age: Math.max(0, Math.min(120, n)),
+                })
+              }
+            />
+          </div>
+          <button
+            type="button"
+            onClick={recompute}
+            className="bg-foreground text-background mt-3 rounded px-3 py-1.5 text-xs font-medium"
+          >
+            Compute gap & levers
+          </button>
+
+          {result ? <GoalSeekDisplay result={result} /> : null}
+
+          <p className="text-muted mt-3 text-[10px] italic">
+            Estimates based on your assumptions, not a recommendation. Each
+            lever shows what that one variable would need to be — alone —
+            to reach the target, holding everything else fixed.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function GoalSeekDisplay({ result }: { result: GoalSeekResult }) {
+  if (result.kind === 'no-target' || result.kind === 'no-people') return null;
+
+  if (result.kind === 'on-track') {
+    return (
+      <div className="border-border mt-3 flex flex-col gap-1 rounded border p-3">
+        <p className="text-positive text-xs font-medium">On track ✓</p>
+        <p className="text-muted nums text-[11px]">
+          Projected {fmtMoney(result.projected)} by age {result.targetAge} —
+          surplus of {fmtMoney(result.surplus)} above your target of {fmtMoney(result.target)}.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-border mt-3 flex flex-col gap-2 rounded border p-3">
+      <div className="flex flex-col gap-0.5">
+        <p className="text-foreground text-xs">
+          Projected {fmtMoney(result.projected)} by age {result.targetAge}
+        </p>
+        <p className="text-negative text-xs">
+          Short by {fmtMoney(result.gap)} of the {fmtMoney(result.target)} target.
+        </p>
+      </div>
+      <p className="text-muted mt-1 text-[11px]">
+        Any ONE of these alone would close the gap (everything else held fixed):
+      </p>
+      <ul className="flex flex-col gap-1.5">
+        <LeverRow
+          label="Save extra"
+          result={
+            result.levers.extraMonthlyContribution.ok
+              ? {
+                  ok: true,
+                  // Convert annual → monthly for display, both value & delta.
+                  value: result.levers.extraMonthlyContribution.value / 12,
+                  delta: result.levers.extraMonthlyContribution.delta / 12,
+                }
+              : result.levers.extraMonthlyContribution
+          }
+          formatValue={(v) => `${fmtMoney(v)}/mo`}
+          formatDelta={(d) => `${fmtMoneyDelta(d)}/mo vs now`}
+        />
+        <LeverRow
+          label="Average return"
+          result={result.levers.returnPct}
+          formatValue={(v) => fmtPct(v)}
+          formatDelta={(d) => `${d >= 0 ? '+' : '−'}${Math.abs(d).toFixed(1)} pts`}
+        />
+        <LeverRow
+          label="Spend less"
+          result={
+            result.levers.annualExpenses.ok
+              ? {
+                  ok: true,
+                  value: result.levers.annualExpenses.value / 12,
+                  delta: result.levers.annualExpenses.delta / 12,
+                }
+              : result.levers.annualExpenses
+          }
+          formatValue={(v) => `${fmtMoney(v)}/mo`}
+          formatDelta={(d) => `${fmtMoneyDelta(d)}/mo vs now`}
+        />
+        <LeverRow
+          label="Push target age"
+          result={result.levers.targetAge}
+          formatValue={(v) => `age ${v.toFixed(1)}`}
+          formatDelta={(d) => fmtYears(d)}
+        />
+      </ul>
+    </div>
+  );
+}

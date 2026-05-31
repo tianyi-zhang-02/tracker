@@ -11,6 +11,7 @@ import type { Assumptions } from '@/lib/validation/scenarios';
 import AssumptionsForm from './assumptions-form';
 import CompareView from './compare-view';
 import { defaultAssumptions } from './default-assumptions';
+import GoalSeekPanel from './goal-seek-panel';
 import YearTable from './year-table';
 
 function fmtCurrency0(n: number): string {
@@ -431,6 +432,9 @@ export default function SimulatorClient({
           />
         ) : null}
       </section>
+
+      {/* Goal-seek target + levers panel. */}
+      <GoalSeekPanel assumptions={assumptions} onChange={setAssumptions} />
 
       {/* The big assumptions form. */}
       <AssumptionsForm value={assumptions} onChange={setAssumptions} />
