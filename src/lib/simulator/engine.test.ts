@@ -355,6 +355,172 @@ describe('simulate — multi-year, multi-mechanic sanity check', () => {
   });
 });
 
+describe('simulate — lifestyle creep (flat mode)', () => {
+  it('absent lifestyle key behaves identically to flat mode with 0% creep', () => {
+    const baseAssumptions = emptyAssumptions({
+      horizonStartYear: 2030,
+      horizonEndYear: 2032,
+      recurringAnnualExpenses: 50_000,
+      inflationPct: 3,
+    });
+    const withoutKey = simulate(baseAssumptions);
+    const withZeroCreep = simulate({
+      ...baseAssumptions,
+      lifestyle: { mode: 'flat', lifestyleCreepPct: 0, creepShareOfRaisePct: 0 },
+    });
+    for (let i = 0; i < 3; i += 1) {
+      expect(withZeroCreep.rows[i]!.expenses).toBeCloseTo(withoutKey.rows[i]!.expenses, 2);
+    }
+  });
+
+  it('flat mode multiplies the inflation factor by (1+creep)^(i+1)', () => {
+    // Hand-computable: $50k base, 3% inflation, 1% lifestyle creep, 3 yrs.
+    // Row i expenses = 50000 × 1.03^(i+1) × 1.01^(i+1).
+    const a = emptyAssumptions({
+      horizonStartYear: 2030,
+      horizonEndYear: 2032,
+      recurringAnnualExpenses: 50_000,
+      inflationPct: 3,
+      lifestyle: { mode: 'flat', lifestyleCreepPct: 1, creepShareOfRaisePct: 0 },
+    });
+    const { rows } = simulate(a);
+    expect(rows[0]!.expenses).toBeCloseTo(50_000 * 1.03 * 1.01, 2);
+    expect(rows[1]!.expenses).toBeCloseTo(50_000 * Math.pow(1.03, 2) * Math.pow(1.01, 2), 2);
+    expect(rows[2]!.expenses).toBeCloseTo(50_000 * Math.pow(1.03, 3) * Math.pow(1.01, 3), 2);
+  });
+
+  it('flat mode with negative creep models lifestyle DEflation', () => {
+    // Belt-and-suspenders: schema allows -50..50, engine should handle it
+    // (a household downsizing year-over-year). Expected to compose
+    // multiplicatively with inflation.
+    const a = emptyAssumptions({
+      horizonStartYear: 2030,
+      horizonEndYear: 2030,
+      recurringAnnualExpenses: 50_000,
+      inflationPct: 3,
+      lifestyle: { mode: 'flat', lifestyleCreepPct: -2, creepShareOfRaisePct: 0 },
+    });
+    expect(simulate(a).rows[0]!.expenses).toBeCloseTo(50_000 * 1.03 * 0.98, 2);
+  });
+});
+
+describe('simulate — lifestyle creep (income-scaled mode)', () => {
+  it('with no income, incomeScaled reduces to baseline inflation', () => {
+    // No people → after-tax income is 0 every year → no raises to absorb.
+    // Baseline still inflates year-over-year exactly like flat mode.
+    const a = emptyAssumptions({
+      horizonStartYear: 2030,
+      horizonEndYear: 2032,
+      recurringAnnualExpenses: 50_000,
+      inflationPct: 3,
+      lifestyle: { mode: 'incomeScaled', lifestyleCreepPct: 0, creepShareOfRaisePct: 50 },
+    });
+    const { rows } = simulate(a);
+    // baseline_0 = 50_000 × 1.03 = 51_500.
+    expect(rows[0]!.expenses).toBeCloseTo(50_000 * 1.03, 2);
+    // baseline_1 = 51_500 × 1.03 = 53_045 (no raise add-on, income is 0).
+    expect(rows[1]!.expenses).toBeCloseTo(50_000 * 1.03 * 1.03, 2);
+    expect(rows[2]!.expenses).toBeCloseTo(50_000 * Math.pow(1.03, 3), 2);
+  });
+
+  it('absorbs creepShareOfRaisePct % of an after-tax raise into next year', () => {
+    /**
+     * Hand-computed walk:
+     *   Person: base $100k year 0, raises to $110k year 1 (10% raise).
+     *   Tax 0 → after-tax = gross. Inflation 0 (so we isolate the raise math).
+     *   creepShare = 50%.
+     *
+     *   baseline_0 = 50_000 × (1+0) = 50_000      ← year 0
+     *   raise = max(0, 110_000 - 100_000) = 10_000
+     *   baseline_1 = 50_000 × 1 + 10_000 × 0.50 = 55_000
+     */
+    const a = emptyAssumptions({
+      horizonStartYear: 2030,
+      horizonEndYear: 2031,
+      people: [
+        {
+          id: 'p1',
+          name: 'A',
+          birthYear: 2000,
+          careerStages: [{ label: 'X', startAge: 30, baseSalary: 100_000, annualRaisePct: 10 }],
+        },
+      ],
+      effectiveTaxRatePct: 0,
+      inflationPct: 0,
+      recurringAnnualExpenses: 50_000,
+      lifestyle: { mode: 'incomeScaled', lifestyleCreepPct: 0, creepShareOfRaisePct: 50 },
+    });
+    const { rows } = simulate(a);
+    expect(rows[0]!.expenses).toBeCloseTo(50_000, 2);
+    expect(rows[1]!.expenses).toBeCloseTo(55_000, 2);
+  });
+
+  it('clamps a pay cut (income drop) so spending doesn\'t reduce', () => {
+    /**
+     * Person earns $100k year 0, $80k year 1 (negative raise = pay cut).
+     * The raise is clamped to 0, so the baseline still inflates as if no
+     * change. This is intentional — lifestyle is sticky downward.
+     */
+    const a = emptyAssumptions({
+      horizonStartYear: 2030,
+      horizonEndYear: 2031,
+      people: [
+        {
+          id: 'p1',
+          name: 'A',
+          birthYear: 2000,
+          careerStages: [
+            { label: 'high', startAge: 30, baseSalary: 100_000, annualRaisePct: 0 },
+            { label: 'low', startAge: 31, baseSalary: 80_000, annualRaisePct: 0 },
+          ],
+        },
+      ],
+      effectiveTaxRatePct: 0,
+      inflationPct: 0,
+      recurringAnnualExpenses: 50_000,
+      lifestyle: { mode: 'incomeScaled', lifestyleCreepPct: 0, creepShareOfRaisePct: 50 },
+    });
+    const { rows } = simulate(a);
+    // baseline_0 = 50_000. baseline_1 = 50_000 × 1.0 + max(0, 80k - 100k) × 0.5 = 50_000.
+    expect(rows[0]!.expenses).toBeCloseTo(50_000, 2);
+    expect(rows[1]!.expenses).toBeCloseTo(50_000, 2);
+  });
+});
+
+describe('simulate — extraAnnualContribution stacks on the savings rate', () => {
+  it('adds the extra dollars to saved when expenses are within budget', () => {
+    const a = emptyAssumptions({
+      horizonStartYear: 2030,
+      horizonEndYear: 2030,
+      people: [
+        {
+          id: 'p1',
+          name: 'A',
+          birthYear: 2000,
+          careerStages: [{ label: 'X', startAge: 30, baseSalary: 100_000, annualRaisePct: 0 }],
+        },
+      ],
+      effectiveTaxRatePct: 25,
+      annualSavingsRatePct: 30,
+      extraAnnualContribution: 5_000,
+    });
+    // afterTax = 75k, intended = 22.5k, expenses 0 → saved = 22.5k + 5k.
+    expect(simulate(a).rows[0]!.saved).toBeCloseTo(27_500, 2);
+  });
+
+  it('still applies during a shortfall (extra is added then shortfall subtracted)', () => {
+    const a = emptyAssumptions({
+      horizonStartYear: 2030,
+      horizonEndYear: 2030,
+      startingNetWorth: 100_000,
+      recurringAnnualExpenses: 30_000,
+      extraAnnualContribution: 5_000,
+      // No income → consumable 0, shortfall 30k. saved = 0 + 5k - 30k = -25k.
+    });
+    expect(simulate(a).rows[0]!.saved).toBeCloseTo(-25_000, 2);
+  });
+});
+
 describe('simulate — horizon edge cases', () => {
   it('produces exactly one row when start == end', () => {
     const a = emptyAssumptions({ horizonStartYear: 2030, horizonEndYear: 2030 });

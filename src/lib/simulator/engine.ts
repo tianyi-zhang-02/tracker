@@ -1,6 +1,7 @@
 import type {
   Assumptions,
   CareerStage,
+  Lifestyle,
   MajorExpense,
   Person,
 } from '@/lib/validation/scenarios';
@@ -33,13 +34,46 @@ import type {
  *   6. **Savings-rate vs expenses cash flow.**
  *      - intendedContribution = afterTaxIncome × savingsRate%
  *      - consumable = afterTaxIncome − intendedContribution
- *      - If expenses ≤ consumable: `saved = intendedContribution`. The
- *        leftover `consumable − expenses` is treated as discretionary
- *        spending (lifestyle absorption), NOT extra savings.
+ *      - If expenses ≤ consumable: `saved = intendedContribution +
+ *        extraAnnualContribution`. The leftover `consumable − expenses`
+ *        is treated as discretionary spending (lifestyle absorption),
+ *        NOT extra savings.
  *      - If expenses > consumable: `shortfall = expenses − consumable`
- *        and `saved = intendedContribution − shortfall`, which can go
- *        negative — that's a drawdown from the investment balance.
+ *        and `saved = intendedContribution + extraAnnualContribution −
+ *        shortfall`, which can go negative — that's a drawdown from the
+ *        investment balance.
  *      - Windfalls always go straight to the balance, untaxed.
+ *      - `extraAnnualContribution` is the additional savings dollars used
+ *        by the goal-seek "save $X/mo more" lever (Feature 4). Defaults
+ *        to 0 when absent. It sits on the contribution side of the ledger
+ *        — it stacks with the savings rate, it does NOT change the
+ *        expense baseline.
+ *   6a. **Lifestyle creep (interaction with #6).**
+ *      Per `assumptions.lifestyle.mode`:
+ *      - Absent OR `flat` with `lifestyleCreepPct=0`: pre-creep behavior.
+ *        `expenses_i = recurringAnnualExpenses × (1+infl)^(i+1) + major[i]`.
+ *      - `flat`: expenses grow at inflation AND a lifestyle drift rate.
+ *        `expenses_i = recurringAnnualExpenses
+ *                      × (1+infl)^(i+1)
+ *                      × (1+creep)^(i+1)
+ *                      + major[i]`.
+ *      - `incomeScaled`: expenses start at the same year-0 baseline as
+ *        flat, then each subsequent year inflate the prior baseline AND
+ *        absorb `creepShareOfRaisePct` % of any after-tax raise:
+ *        `baseline_0   = recurringAnnualExpenses × (1+infl)`
+ *        `baseline_i+1 = baseline_i × (1+infl)
+ *                        + max(0, afterTax_i+1 − afterTax_i)
+ *                          × creepShareOfRaisePct/100`
+ *        `expenses_i   = baseline_i + major[i]`.
+ *      Interaction with the savings-rate cap:
+ *      - The savings rate is still the ceiling on the user's intended
+ *        savings (contribution side of the ledger). Lifestyle creep only
+ *        moves the expense side. They cannot double-count because they
+ *        act on different sides of the cash-flow equation.
+ *      - The leftover `consumable − expenses` (the "lifestyle absorption"
+ *        residual described in #6) still exists. In `incomeScaled` mode it
+ *        naturally shrinks toward 0 as creep absorbs more of each raise
+ *        into the baseline. That is intentional, not a double-count.
  *   7. **Inflation — coherent end-of-year convention.**
  *      Every value in row i is interpreted as T=i+1 nominal
  *      (end-of-year-i). Concretely:
@@ -102,9 +136,35 @@ export function simulate(assumptions: Assumptions): SimulationResult {
   };
 }
 
+/**
+ * Defaults applied when `assumptions.lifestyle` is absent — preserves the
+ * pre-creep formula exactly: `expenses = base × (1+infl)^(i+1)`.
+ */
+function resolveLifestyle(a: Assumptions): Lifestyle {
+  return (
+    a.lifestyle ?? {
+      mode: 'flat',
+      lifestyleCreepPct: 0,
+      creepShareOfRaisePct: 0,
+    }
+  );
+}
+
 function simulateScenario(a: Assumptions, returnPct: number): YearRow[] {
   const rows: YearRow[] = [];
   let balance = a.startingNetWorth;
+
+  const lifestyle = resolveLifestyle(a);
+  const inflRate = a.inflationPct / 100;
+  const creepRate = lifestyle.lifestyleCreepPct / 100;
+  const creepShare = lifestyle.creepShareOfRaisePct / 100;
+  const extraContribution = a.extraAnnualContribution ?? 0;
+
+  // For `incomeScaled` mode we need to walk year-to-year carrying the
+  // previous baseline and the previous after-tax income so we can add
+  // creepShare × ΔafterTax to next year's baseline.
+  let prevBaselineExpenses = 0;
+  let prevAfterTaxIncome = 0;
 
   const totalYears = a.horizonEndYear - a.horizonStartYear + 1;
   for (let i = 0; i < totalYears; i += 1) {
@@ -120,13 +180,28 @@ function simulateScenario(a: Assumptions, returnPct: number): YearRow[] {
     }
     const afterTaxIncome = grossIncome * (1 - a.effectiveTaxRatePct / 100);
 
-    // 2. Expenses (recurring, inflated + active major-expense rows).
-    // Convention: row i's nominal values are at T=i+1 (end of year i), so
-    // recurring expenses inflate by `(1+infl)^(i+1)`. The recurring
-    // input is today's (T=0) spend; the first horizon year is one
-    // inflation period from "now."
-    const expenseInflationFactor = Math.pow(1 + a.inflationPct / 100, yearsElapsed + 1);
-    const baselineExpenses = a.recurringAnnualExpenses * expenseInflationFactor;
+    // 2. Expenses. The recurring/inflation-only convention (T=i+1 nominal)
+    // is preserved; lifestyle-creep stacks on top per assumption #6a.
+    const expenseInflationFactor = Math.pow(1 + inflRate, yearsElapsed + 1);
+
+    let baselineExpenses: number;
+    if (lifestyle.mode === 'flat') {
+      // (1+infl)^(i+1) × (1+creep)^(i+1). When creep=0 this collapses to
+      // the pre-Feature-3 formula exactly.
+      const creepFactor = Math.pow(1 + creepRate, yearsElapsed + 1);
+      baselineExpenses = a.recurringAnnualExpenses * expenseInflationFactor * creepFactor;
+    } else {
+      // incomeScaled: anchor year 0 at the same place as flat (one
+      // inflation period from "now"), then accrete creep from raises
+      // year-over-year. ΔafterTax can be negative (income drop, retirement)
+      // — clamp to ≥ 0 so a pay cut doesn't *reduce* lifestyle spending.
+      if (i === 0) {
+        baselineExpenses = a.recurringAnnualExpenses * (1 + inflRate);
+      } else {
+        const raise = Math.max(0, afterTaxIncome - prevAfterTaxIncome);
+        baselineExpenses = prevBaselineExpenses * (1 + inflRate) + raise * creepShare;
+      }
+    }
     let majorExpensesThisYear = 0;
     for (const e of a.majorExpenses) majorExpensesThisYear += amountForYear(e, year);
     const expenses = baselineExpenses + majorExpensesThisYear;
@@ -140,10 +215,10 @@ function simulateScenario(a: Assumptions, returnPct: number): YearRow[] {
     const consumable = afterTaxIncome - intendedContribution;
     let saved: number;
     if (expenses <= consumable) {
-      saved = intendedContribution;
+      saved = intendedContribution + extraContribution;
     } else {
       const shortfall = expenses - consumable;
-      saved = intendedContribution - shortfall; // can be negative
+      saved = intendedContribution + extraContribution - shortfall; // can be negative
     }
 
     // 5. Start-of-year growth, then end-of-year adjustments.
@@ -168,6 +243,10 @@ function simulateScenario(a: Assumptions, returnPct: number): YearRow[] {
       netWorth,
       netWorthRealTodayDollars,
     });
+
+    // Carry forward for the next year of incomeScaled mode.
+    prevBaselineExpenses = baselineExpenses;
+    prevAfterTaxIncome = afterTaxIncome;
   }
 
   return rows;

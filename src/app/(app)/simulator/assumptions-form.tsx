@@ -1,11 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { CAREER_PRESETS } from '@/lib/simulator/career-presets';
+import {
+  ROLE_PRESETS,
+  searchRolePresets,
+  type RolePreset,
+} from '@/lib/simulator/rolePresets';
 import type {
   Assumptions,
   CareerStage,
+  Lifestyle,
   MajorExpense,
   Person,
   Windfall,
@@ -40,6 +46,27 @@ function Section({
   );
 }
 
+/**
+ * Numeric input that fixes the "type-and-prepend-0" UX bug:
+ *
+ *   - When the underlying value is `0`, the input renders empty with a `0`
+ *     placeholder. Typing puts characters into an empty field instead of
+ *     prepending to a literal "0".
+ *   - During editing, we keep a local string buffer so the user can clear,
+ *     type "-", or type "1." mid-decimal without the parent forcing the
+ *     value back to 0 on every keystroke.
+ *   - Click/focus selects the entire value so non-zero fields are easy to
+ *     replace too.
+ *   - On blur, an empty or unparseable buffer propagates as `0` and the
+ *     local buffer is released so external prop updates (e.g. the
+ *     "Use my actual data" prefill) take over again.
+ *
+ * The pattern is deliberately controlled-but-tolerant: while the user is
+ * actively editing, the local buffer wins; outside of editing, the prop
+ * value is the source of truth. This avoids the React 19
+ * `set-state-in-effect` lint and the fight-the-cursor bugs that come with
+ * naive `useEffect`-based re-syncing.
+ */
 function NumField({
   label,
   value,
@@ -57,6 +84,12 @@ function NumField({
   onChange: (n: number) => void;
   suffix?: string;
 }) {
+  // null = "not currently editing; derive display from prop".
+  // string = "user is editing; use this string verbatim".
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const display = draft !== null ? draft : value === 0 ? '' : String(value);
+
   return (
     <label className="flex flex-col gap-1">
       <span className="text-muted text-xs">{label}</span>
@@ -67,16 +100,109 @@ function NumField({
           step={step}
           min={min}
           max={max}
-          value={value}
+          value={display}
+          placeholder="0"
+          onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => {
-            const n = e.target.valueAsNumber;
-            onChange(Number.isFinite(n) ? n : 0);
+            const next = e.target.value;
+            setDraft(next);
+            // Only propagate when the buffer parses to a finite number.
+            // Empty / "-" / "1." stay local until blur — propagating those
+            // as 0 would clobber what the user is in the middle of typing.
+            if (next.trim() === '') return;
+            const n = Number(next);
+            if (Number.isFinite(n)) onChange(n);
+          }}
+          onBlur={() => {
+            // Release the buffer back to prop-derived display. If the user
+            // left it empty or garbage, fall back to 0 so the form's number
+            // shape stays valid.
+            if (draft !== null) {
+              const trimmed = draft.trim();
+              if (trimmed === '' || !Number.isFinite(Number(trimmed))) {
+                onChange(0);
+              }
+              setDraft(null);
+            }
           }}
           className="border-border focus:border-foreground nums w-full rounded border bg-transparent px-3 py-2 text-base outline-none"
         />
         {suffix ? <span className="text-muted text-xs">{suffix}</span> : null}
       </div>
     </label>
+  );
+}
+
+/**
+ * Inline role-library search for a career stage. The user types a query;
+ * matching roles render as a small clickable list. Clicking one fills
+ * baseSalary / annualRaisePct / bonusPct on the stage; everything stays
+ * editable afterward.
+ *
+ * Deliberately stateless about "which role was picked" — once applied,
+ * the stage is just a stage, not a tagged preset. The library is a
+ * starting point, not a category. This matches the disclaimer the UI
+ * surfaces ("starting estimates, replace with your own figures") — you
+ * should never be able to tell, after editing, that someone "is" still
+ * the BigLaw associate preset.
+ */
+function RoleSearchBox({
+  onPick,
+}: {
+  onPick: (preset: RolePreset) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+
+  // Memoized so typing doesn't repeatedly re-filter on identical inputs.
+  const results = useMemo(() => searchRolePresets(query).slice(0, 8), [query]);
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        // Delay blur close so an onClick on a result can fire first.
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        placeholder={`Search ${ROLE_PRESETS.length} starting roles (e.g. "biglaw", "L5", "MLE")…`}
+        className="border-border focus:border-foreground placeholder:text-muted/50 w-full rounded border bg-transparent px-3 py-2 text-xs outline-none"
+      />
+      {open && results.length > 0 ? (
+        <ul
+          className="border-border bg-background absolute top-full right-0 left-0 z-10 mt-1 max-h-64 overflow-auto rounded border shadow-lg"
+          role="listbox"
+        >
+          {results.map((r) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                // onMouseDown fires before the input's onBlur, so the pick
+                // lands before the dropdown collapses.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onPick(r);
+                  setQuery('');
+                  setOpen(false);
+                }}
+                className="hover:bg-foreground/5 flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left"
+              >
+                <span className="text-foreground text-xs">{r.title}</span>
+                <span className="text-muted text-[10px]">
+                  {r.track === 'legal' ? 'Legal' : 'SWE / MLE'} · ${r.baseSalary.toLocaleString()}
+                  /yr base · +{r.annualRaisePct}% raise · {r.bonusPct}% bonus
+                </span>
+                {r.notes ? <span className="text-muted text-[10px] italic">{r.notes}</span> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -105,6 +231,81 @@ function TextField({
         className="border-border focus:border-foreground placeholder:text-muted/50 rounded border bg-transparent px-3 py-2 text-base outline-none"
       />
     </label>
+  );
+}
+
+/**
+ * UI for `assumptions.lifestyle`. Absent state means "use pre-Feature-3
+ * behavior" (= flat, 0% creep). To turn lifestyle creep off after enabling
+ * it, set the mode dropdown to "Off" — that drops the key back to undefined.
+ */
+function LifestyleEditor({
+  value,
+  onChange,
+}: {
+  value: Lifestyle | undefined;
+  onChange: (next: Lifestyle | undefined) => void;
+}) {
+  const mode: 'off' | 'flat' | 'incomeScaled' = value?.mode ?? 'off';
+
+  function setMode(next: 'off' | 'flat' | 'incomeScaled') {
+    if (next === 'off') {
+      onChange(undefined);
+      return;
+    }
+    onChange({
+      mode: next,
+      lifestyleCreepPct: value?.lifestyleCreepPct ?? 1,
+      creepShareOfRaisePct: value?.creepShareOfRaisePct ?? 50,
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="flex flex-col gap-1">
+        <span className="text-muted text-xs">Mode</span>
+        <select
+          value={mode}
+          onChange={(e) => setMode(e.target.value as 'off' | 'flat' | 'incomeScaled')}
+          className="border-border bg-background rounded border px-3 py-2 text-sm"
+        >
+          <option value="off">Off — expenses only track inflation</option>
+          <option value="flat">Flat — grow at inflation + a fixed % per year</option>
+          <option value="incomeScaled">Income-scaled — absorb a % of each raise</option>
+        </select>
+      </label>
+
+      {mode === 'flat' && value ? (
+        <NumField
+          label="Lifestyle creep above inflation"
+          value={value.lifestyleCreepPct}
+          step={0.25}
+          min={-50}
+          max={50}
+          onChange={(n) => onChange({ ...value, lifestyleCreepPct: n })}
+          suffix="%/yr"
+        />
+      ) : null}
+
+      {mode === 'incomeScaled' && value ? (
+        <NumField
+          label="Share of each raise absorbed"
+          value={value.creepShareOfRaisePct}
+          step={5}
+          min={0}
+          max={100}
+          onChange={(n) => onChange({ ...value, creepShareOfRaisePct: n })}
+          suffix="%"
+        />
+      ) : null}
+
+      <p className="text-muted text-[10px]">
+        Lifestyle creep models that spending tends to rise over time. Flat mode
+        adds a steady drift above inflation; income-scaled absorbs a portion of
+        every raise. Off keeps the pre-creep behavior (expenses track inflation
+        only).
+      </p>
+    </div>
   );
 }
 
@@ -263,6 +464,13 @@ export default function AssumptionsForm({
         </div>
       </Section>
 
+      <Section title="Lifestyle creep" defaultOpen={false}>
+        <LifestyleEditor
+          value={value.lifestyle}
+          onChange={(next) => update({ lifestyle: next })}
+        />
+      </Section>
+
       <Section title="Investment & inflation">
         <div className="grid grid-cols-1 gap-3">
           <NumField
@@ -366,6 +574,23 @@ export default function AssumptionsForm({
                 <ul className="mt-3 flex flex-col gap-2">
                   {p.careerStages.map((s, i) => (
                     <li key={i} className="border-border rounded border p-3">
+                      <div className="mb-3 flex flex-col gap-1">
+                        <span className="text-muted text-[10px] tracking-[0.18em] uppercase">
+                          Role library
+                        </span>
+                        <RoleSearchBox
+                          onPick={(preset) =>
+                            patchStage(p.id, i, {
+                              baseSalary: preset.baseSalary,
+                              annualRaisePct: preset.annualRaisePct,
+                              bonusPct: preset.bonusPct,
+                            })
+                          }
+                        />
+                        <span className="text-muted text-[10px] italic">
+                          Starting estimates — replace with your own figures.
+                        </span>
+                      </div>
                       <div className="grid grid-cols-2 gap-3">
                         <TextField
                           label="Label"

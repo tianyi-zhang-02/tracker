@@ -63,6 +63,44 @@ const investmentSchema = z
   });
 export type Investment = z.infer<typeof investmentSchema>;
 
+/**
+ * Lifestyle-creep settings. Optional — scenarios saved before Feature 3
+ * have no `lifestyle` key and default to the pre-creep behavior
+ * (engine treats this as `mode: 'flat'`, `lifestyleCreepPct: 0`).
+ *
+ * Mode `flat`: spending grows at inflation **plus** `lifestyleCreepPct`
+ * per year — purely time-based, doesn't look at income.
+ *
+ * Mode `incomeScaled`: spending tracks income raises — each year,
+ * `creepShareOfRaisePct` % of any after-tax raise is absorbed into the
+ * baseline. The remaining baseline still inflates by `inflationPct`
+ * year-over-year.
+ *
+ * Both modes interact with the savings-rate cap exactly the way the
+ * pre-creep engine did: expenses sit on the expense side of the cash-
+ * flow ledger; savings-rate sits on the contribution side. See the
+ * engine header for the documented interaction.
+ */
+const lifestyleSchema = z.object({
+  mode: z.enum(['flat', 'incomeScaled']),
+  /** Used in `flat` mode. Annual lifestyle drift above inflation, in %. */
+  lifestyleCreepPct: z.number().min(-50).max(50),
+  /** Used in `incomeScaled` mode. % of each after-tax raise absorbed into baseline expenses. */
+  creepShareOfRaisePct: z.number().min(0).max(100),
+});
+export type Lifestyle = z.infer<typeof lifestyleSchema>;
+
+/**
+ * Goal-seek target. Optional — when absent, the goal-seek panel is
+ * not shown. `age` refers to the primary (first) person's age. Solver
+ * extends the simulation horizon internally as needed.
+ */
+const targetSchema = z.object({
+  amount: positiveMoney,
+  age: age,
+});
+export type SimTarget = z.infer<typeof targetSchema>;
+
 // ---------- Top-level assumptions ----------
 
 export const assumptionsSchema = z
@@ -79,6 +117,16 @@ export const assumptionsSchema = z
     windfalls: z.array(windfallSchema).max(100),
     majorExpenses: z.array(majorExpenseSchema).max(100),
     recurringAnnualExpenses: positiveMoney,
+    // Added in Feature 3 (simulator v2). Optional for back-compat with
+    // scenarios saved before this field existed.
+    lifestyle: lifestyleSchema.optional(),
+    // Added in Feature 4 (simulator v2). Optional — when absent, the
+    // goal-seek panel is not rendered.
+    target: targetSchema.optional(),
+    // Added in Feature 4 (simulator v2). Additional annual contribution on
+    // top of the savings-rate calculation, in nominal dollars. Used as the
+    // "save $X/mo more" lever; defaults to 0 if absent.
+    extraAnnualContribution: positiveMoney.optional(),
   })
   .refine((v) => v.horizonEndYear >= v.horizonStartYear, {
     message: 'horizonEndYear must be ≥ horizonStartYear',
