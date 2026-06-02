@@ -8,11 +8,11 @@ import { simulate } from '@/lib/simulator/engine';
 import type { Scenario } from '@/lib/types/scenario';
 import type { Assumptions } from '@/lib/validation/scenarios';
 
-import AssumptionsForm from './assumptions-form';
-import CompareView from './compare-view';
-import { defaultAssumptions } from './default-assumptions';
-import GoalSeekPanel from './goal-seek-panel';
-import YearTable from './year-table';
+import AssumptionsForm from '@/components/simulator/assumptions-form';
+import CompareView from '@/components/simulator/compare-view';
+import { defaultAssumptions } from '@/components/simulator/default-assumptions';
+import GoalSeekPanel from '@/components/simulator/goal-seek-panel';
+import YearTable from '@/components/simulator/year-table';
 
 function fmtCurrency0(n: number): string {
   if (!Number.isFinite(n)) return '—';

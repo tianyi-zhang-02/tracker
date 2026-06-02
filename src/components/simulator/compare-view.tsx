@@ -12,7 +12,20 @@ import {
 } from 'recharts';
 
 import { simulate, type YearRow } from '@/lib/simulator/engine';
-import type { Scenario } from '@/lib/types/scenario';
+import type { Assumptions } from '@/lib/validation/scenarios';
+
+/**
+ * Compare-view consumes only `{id, name, assumptions}` from each scenario,
+ * not the full server-row shape (`user_id`, `created_at`, ...). Typing it
+ * this narrowly lets the public `/sim` page pass in-memory local scenarios
+ * without having to fake server-only fields — and the authed Scenario
+ * type from `@/lib/types/scenario` is still structurally assignable here.
+ */
+export type ComparableScenario = {
+  id: string;
+  name: string;
+  assumptions: Assumptions;
+};
 
 const COMPARE_COLORS = [
   'var(--accent)',
@@ -60,7 +73,7 @@ export default function CompareView({
   scenarios,
   onExit,
 }: {
-  scenarios: Scenario[];
+  scenarios: ComparableScenario[];
   onExit: () => void;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>(
