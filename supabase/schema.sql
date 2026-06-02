@@ -96,6 +96,31 @@ create policy "holdings: owner full access" on public.holdings
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ============================================================================
+-- holding_lots (Phase 4 — tax-lot accounting)
+-- A holding's total quantity and cost basis are the SUM of its lots.
+-- Each lot represents one acquisition event with its own acquired_on date,
+-- which drives long-term vs short-term classification (Phase 4+ work).
+-- ============================================================================
+create table if not exists public.holding_lots (
+  id                    uuid primary key default gen_random_uuid(),
+  user_id               uuid not null references auth.users(id) on delete cascade,
+  holding_id            uuid not null references public.holdings(id) on delete cascade,
+  -- Match the precision of holdings exactly.
+  quantity              numeric(18,8) not null check (quantity >= 0),
+  cost_basis            numeric(14,2) not null check (cost_basis >= 0),
+  acquired_on           date not null,
+  acquired_on_estimated boolean not null default false,
+  created_at            timestamptz not null default now()
+);
+create index if not exists holding_lots_user_id_idx    on public.holding_lots(user_id);
+create index if not exists holding_lots_holding_id_idx on public.holding_lots(holding_id);
+
+alter table public.holding_lots enable row level security;
+drop policy if exists "holding_lots: owner full access" on public.holding_lots;
+create policy "holding_lots: owner full access" on public.holding_lots
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ============================================================================
 -- account_snapshots
 -- ============================================================================
 create table if not exists public.account_snapshots (
