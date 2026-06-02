@@ -6,6 +6,40 @@ The project doesn't ship a versioned package — entries are grouped by mileston
 
 ## [Unreleased]
 
+### Phase 4 — tax lots (data model only)
+
+- **Added** `public.holding_lots` table. One acquisition-event per row,
+  rolling up into a holding. Columns: `quantity`, `cost_basis`,
+  `acquired_on`, `acquired_on_estimated`. RLS on, owner-only policy
+  (`auth.uid() = user_id`). Indexes on `user_id` and `holding_id`.
+- **Added** migration `0003_holding_lots.sql`. Additive and
+  forward-only:
+  - Wraps the entire migration in an explicit `begin; ... commit;` so
+    self-hosters never end up in a half-applied state.
+  - Backfills one lot per existing holding mirroring `quantity` and
+    `cost_basis` to the cent, with `acquired_on = created_at::date` and
+    `acquired_on_estimated = true` so the UI can render the date as a
+    placeholder until the user supplies a real acquisition date.
+  - Idempotent — re-running skips holdings that already have at least
+    one lot.
+  - Transactional safety check at the end: RAISES and rolls back the
+    entire transaction if any holding's lot sums don't equal the
+    holding total to the cent.
+- **Added** `supabase/migrations/0003_holding_lots.test.ts` — JS-level
+  verification of the backfill mapping with a fixture covering integer
+  shares, fractional DRIP shares, 8-decimal crypto, zero-quantity
+  closed positions, and zero-cost-basis gifts. Demo block prints
+  before/after portfolio totals to the cent.
+- **Added** `ARCHITECTURE.md` — full data-model reference (every table +
+  RLS pattern + holdings ↔ holding_lots invariant) and module map.
+  Linked from README.
+- **Changed** `supabase/schema.sql` includes the `holding_lots` table
+  inline so a fresh installation gets it without applying 0003 — the
+  migration file is for upgrade paths only.
+- **Changed** `supabase/migrations/README.md` documents 0003: what it
+  adds, the backup-before-apply requirement, and the transactional
+  safety check.
+
 ### Phase 3 — documentation + self-hosting (PR #8)
 
 - **Added** `SELF_HOSTING_GUIDE.md` — dogfooded fork-and-deploy walkthrough,

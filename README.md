@@ -50,7 +50,7 @@ See `CLAUDE.md` for the full hard-rule list. Known security debt is tracked in t
 
 ## Architecture
 
-The pieces worth knowing about before reading code.
+The pieces worth knowing about before reading code. For the full data-model reference (every table, RLS pattern, holdings ↔ holding_lots invariant), see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ### Canonical net-worth helper — `src/lib/derived/networth.ts`
 
@@ -155,6 +155,7 @@ Full deploy operator runbook: [STEP_14_DEPLOY.md](./STEP_14_DEPLOY.md).
 | File | What it covers |
 |---|---|
 | [SELF_HOSTING_GUIDE.md](./SELF_HOSTING_GUIDE.md) | Step-by-step run-your-own-copy walkthrough. Includes troubleshooting. |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Full data model (every table + RLS pattern) and module map. |
 | [CHANGELOG.md](./CHANGELOG.md) | Milestone-grouped history, dated, with merge SHAs where applicable. |
 | [CLAUDE.md](./CLAUDE.md) | Hard-rule list + project memory. Read this before contributing. |
 | [STEP_14_DEPLOY.md](./STEP_14_DEPLOY.md) | Operator runbook for deploying to Vercel. |
