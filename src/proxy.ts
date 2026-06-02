@@ -39,6 +39,13 @@ const PUBLIC_PATHS = new Set<string>([
   '/icon1',
   '/icon2',
   '/apple-icon',
+  // Public Wealth Projection Simulator. The page itself is pure client-
+  // side math (see `src/app/sim/public-simulator-client.tsx`) and its
+  // import graph contains NO Supabase / auth / data modules. Exact-match
+  // only — do NOT widen this to a `/sim` prefix or add `/sim/` to
+  // PUBLIC_PREFIXES, or a future `/sim/something-private` would bypass
+  // auth.
+  '/sim',
 ]);
 // /auth/confirm is the magic-link callback; unauth users must reach it.
 const PUBLIC_PREFIXES = ['/auth/'];
