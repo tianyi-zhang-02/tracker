@@ -12,6 +12,13 @@ The project doesn't ship a versioned package — entries are grouped by mileston
   rolling up into a holding. Columns: `quantity`, `cost_basis`,
   `acquired_on`, `acquired_on_estimated`. RLS on, owner-only policy
   (`auth.uid() = user_id`). Indexes on `user_id` and `holding_id`.
+- **Added** classification contract for `acquired_on_estimated`:
+  pinned into the database catalog via `comment on column` (so it
+  travels with the schema), documented in the migration source, and
+  expanded in `ARCHITECTURE.md` § Classification contract. Short
+  version: classification code MUST check the flag first and treat
+  estimated-date lots as "needs review" rather than feeding the
+  placeholder date into the 365-day LT/ST cutoff.
 - **Added** migration `0003_holding_lots.sql`. Additive and
   forward-only:
   - Wraps the entire migration in an explicit `begin; ... commit;` so

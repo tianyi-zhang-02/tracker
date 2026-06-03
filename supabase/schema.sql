@@ -120,6 +120,18 @@ drop policy if exists "holding_lots: owner full access" on public.holding_lots;
 create policy "holding_lots: owner full access" on public.holding_lots
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- Pin the classification contract for `acquired_on_estimated` into the catalog
+-- so it travels with the DB. See supabase/migrations/0003_holding_lots.sql
+-- header for the full contract — short version: code that classifies lots
+-- as long-term / short-term MUST check `acquired_on_estimated` first and treat
+-- true lots as "needs review" rather than using `acquired_on` as input.
+comment on table public.holding_lots is
+  'Per-acquisition lots that roll up into a holding. sum(quantity) = holdings.quantity and sum(cost_basis) = holdings.cost_basis to the cent.';
+comment on column public.holding_lots.acquired_on is
+  'The date the lot was opened. For lots with acquired_on_estimated = true, this is a placeholder and MUST NOT be used for LT/ST classification.';
+comment on column public.holding_lots.acquired_on_estimated is
+  'true = acquired_on is a placeholder, not user-confirmed. Classification code must check this flag first.';
+
 -- ============================================================================
 -- account_snapshots
 -- ============================================================================

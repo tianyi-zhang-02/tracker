@@ -4,13 +4,44 @@
 --   1. Creates `public.holding_lots` (RLS enabled, owner-only policy).
 --   2. Backfills one lot per existing holding so the lot sums exactly
 --      match the holding totals. The migrated lot's `acquired_on` is set
---      to the holding's `created_at::date` and `acquired_on_estimated` is
---      flagged true so the UI can render the date as a placeholder until
---      the user supplies a real acquisition date.
+--      to the holding's `created_at::date` (a placeholder that is NOT
+--      authoritative — see contract below) and `acquired_on_estimated`
+--      is flagged true so the UI can render the date as a placeholder
+--      until the user supplies a real acquisition date.
 --   3. Includes a transactional safety check that RAISES if the lot sums
 --      don't equal the original holding totals to the cent — in that
 --      case the whole transaction rolls back and no half-applied state
 --      reaches the database.
+--
+-- ## CONTRACT: how downstream code MUST treat `acquired_on_estimated`
+--
+-- The `acquired_on` value for backfilled lots is `created_at::date`,
+-- which is when the holding was first added to *tracker* — NOT the
+-- actual acquisition date. For users who have been using the app for
+-- years, this is a useful lower bound. For users who just installed
+-- the app, this date is effectively "today," and using it as a
+-- classification input would mislabel every existing position as
+-- short-term.
+--
+-- Therefore the contract for any code that consumes lots is:
+--
+--   1. Long-term / short-term classification MUST first check
+--      `acquired_on_estimated`. When true:
+--        - DO NOT compute LT/ST from `acquired_on`.
+--        - Render the lot as "acquisition date needs review" with a
+--          CTA to set a real date.
+--        - DO NOT include the lot in any aggregate tax-impact estimate
+--          (LT vs ST gains, hypothetical-sale tax) until the user
+--          replaces the estimated date with a real one.
+--   2. Lots with `acquired_on_estimated = false` are user-confirmed
+--      and may participate in classification + tax estimates per the
+--      365-day rule.
+--   3. Editing a lot's `acquired_on` in the UI MUST set
+--      `acquired_on_estimated = false` as part of the same write —
+--      the flag is only true on rows the user has never reviewed.
+--
+-- The `comment on column` statements below pin this contract into the
+-- catalog so it's queryable from the DB (`\d+ holding_lots` in psql).
 --
 -- Self-hosters: take an encrypted backup from /settings/export BEFORE
 -- applying this migration. Per project rule, migrations are forward-only
@@ -48,6 +79,14 @@ alter table public.holding_lots enable row level security;
 drop policy if exists "holding_lots: owner full access" on public.holding_lots;
 create policy "holding_lots: owner full access" on public.holding_lots
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Pin the classification contract into the catalog so it travels with the DB.
+comment on table public.holding_lots is
+  'Per-acquisition lots that roll up into a holding. sum(quantity) = holdings.quantity and sum(cost_basis) = holdings.cost_basis to the cent. Maintained by migration 0003 and by all future code that mutates this table.';
+comment on column public.holding_lots.acquired_on is
+  'The date the lot was opened. For lots with acquired_on_estimated = true, this is a placeholder (the holding row''s created_at::date) and MUST NOT be used as input to long-term vs short-term tax classification or any tax-impact estimate. See migration 0003 header for the full contract.';
+comment on column public.holding_lots.acquired_on_estimated is
+  'true = acquired_on is a placeholder, not user-confirmed. Classification code must check this flag first and either render "needs review" or exclude the lot from LT/ST + tax estimates. Editing acquired_on in the UI sets this flag to false in the same write.';
 
 -- ---------------------------------------------------------------------------
 -- 2. Backfill: one lot per existing holding

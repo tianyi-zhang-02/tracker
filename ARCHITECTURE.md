@@ -84,6 +84,21 @@ The 0003 migration enforces this invariant at apply time — it RAISES and rolls
 
 For all current reads (portfolio value, dashboard net worth via [`computeNetWorth`](#canonical-net-worth-helper), CSV export), the existing `holdings.quantity` and `holdings.cost_basis` columns are authoritative. Lot data is purely additive — nothing breaks if the application is unaware of lots.
 
+#### Classification contract — `acquired_on_estimated`
+
+Backfilled lots have `acquired_on = holdings.created_at::date` and `acquired_on_estimated = true`. The date is when the holding was first added to *tracker*, **not** the real acquisition date. For users who set up the app recently it's effectively "today," and using it as the input to long-term vs short-term classification would mislabel every existing position as short-term.
+
+The contract (enforced via SQL `comment on column` so it travels with the DB, and documented in the migration source):
+
+1. **Long-term / short-term classification MUST first check `acquired_on_estimated`.** When `true`:
+   - Do not compute LT/ST from `acquired_on`.
+   - Render the lot as "acquisition date needs review" with a CTA to set a real date.
+   - Do not include the lot in any aggregate tax-impact estimate (LT vs ST gains, hypothetical-sale tax) until the user replaces the estimated date with a real one.
+2. **Lots with `acquired_on_estimated = false`** are user-confirmed and may participate in classification + tax estimates per the 365-day rule.
+3. **Editing a lot's `acquired_on` in the UI MUST also set `acquired_on_estimated = false`** in the same write. The flag is only `true` on rows the user has never reviewed.
+
+The Phase 4 follow-up PR that builds the classification UI / tax estimate MUST honor this contract — the next reviewer should reject the PR if it doesn't.
+
 ## Canonical derivations
 
 Two helpers live under `src/lib/derived/`. Both are `'server-only'`. **They are the only correct way to compute the values they own.** Don't recompute net worth or baseline cashflow inline in a route — call these.
