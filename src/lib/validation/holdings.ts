@@ -32,6 +32,14 @@ export const createHoldingSchema = z.object({
   asset_type: z.enum(ASSET_TYPES),
   quantity,
   cost_basis: costBasis,
+  // Optional. When omitted, the server defaults to today's date and
+  // sets `acquired_on_estimated = true` so the UI prompts the user to
+  // confirm. See migration 0003 header for the classification contract.
+  acquired_on: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'acquired_on must be YYYY-MM-DD')
+    .optional(),
+  acquired_on_estimated: z.boolean().optional(),
 });
 export type CreateHoldingInput = z.infer<typeof createHoldingSchema>;
 

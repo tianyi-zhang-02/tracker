@@ -16,6 +16,9 @@ import {
   type AssetType,
   type CreateHoldingInput,
 } from '@/lib/validation/holdings';
+import type { UserSettings } from '@/lib/validation/user-settings';
+
+import LotsPanel from './lots-panel';
 
 const TYPE_LABEL: Record<AssetType, string> = {
   stock: 'Stock',
@@ -61,6 +64,25 @@ export default function PortfolioClient({
   const [refreshing, setRefreshing] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
   const [pendingDelete, startDelete] = useTransition();
+  const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
+
+  // Fetch user_settings once so we know the LT/ST tax rates the lot panel
+  // should pass to the hypothetical-sale estimator.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/user-settings')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j: { settings: UserSettings }) => {
+        if (!cancelled) setSettings(j.settings);
+      })
+      .catch(() => {
+        // Non-fatal — the lots panel will render without tax estimates.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (searchParams.get('add') === '1') router.replace('/portfolio');
@@ -281,58 +303,89 @@ export default function PortfolioClient({
                   ) : null}
                 </div>
                 <ul className="flex flex-col gap-2">
-                  {accRows.map((r) => (
-                    <li
-                      key={r.h.id}
-                      className="border-border flex items-start justify-between gap-3 rounded border p-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base font-medium">{r.h.symbol}</span>
-                          <span className="text-muted text-[10px] tracking-wide uppercase">
-                            {TYPE_LABEL[r.h.asset_type]}
-                          </span>
+                  {accRows.map((r) => {
+                    const expanded = expandedHoldingId === r.h.id;
+                    return (
+                      <li
+                        key={r.h.id}
+                        className="border-border flex flex-col gap-2 rounded border p-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base font-medium">{r.h.symbol}</span>
+                              <span className="text-muted text-[10px] tracking-wide uppercase">
+                                {TYPE_LABEL[r.h.asset_type]}
+                              </span>
+                            </div>
+                            <p className="text-muted nums mt-1 text-[11px]">
+                              {formatQty(r.qty)} ·{' '}
+                              {r.price !== null
+                                ? formatCurrency(r.price, { withCents: true })
+                                : '—'}{' '}
+                              ea · cost {formatCurrency(r.cost)}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <span className="nums text-sm">
+                              {r.value !== null ? formatCurrency(r.value) : '—'}
+                            </span>
+                            {r.pl !== null ? (
+                              <span
+                                className={`nums text-[11px] ${
+                                  r.pl > 0
+                                    ? 'text-positive'
+                                    : r.pl < 0
+                                      ? 'text-negative'
+                                      : 'text-muted'
+                                }`}
+                              >
+                                {r.pl > 0 ? '+' : r.pl < 0 ? '−' : ''}
+                                {formatCurrency(Math.abs(r.pl))}{' '}
+                                {r.plPct !== null ? `(${r.plPct.toFixed(1)}%)` : ''}
+                              </span>
+                            ) : null}
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedHoldingId(expanded ? null : r.h.id)
+                                }
+                                className="text-muted hover:text-foreground text-[11px]"
+                              >
+                                {expanded ? 'Hide lots' : 'Lots'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setMode({ kind: 'edit', holding: r.h })}
+                                className="text-muted hover:text-foreground text-[11px]"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                disabled={pendingDelete}
+                                onClick={() => onDelete(r.h)}
+                                className="text-muted hover:text-negative text-[11px] disabled:opacity-50"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-muted nums mt-1 text-[11px]">
-                          {formatQty(r.qty)} · {r.price !== null ? formatCurrency(r.price, { withCents: true }) : '—'} ea ·
-                          cost {formatCurrency(r.cost)}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <span className="nums text-sm">
-                          {r.value !== null ? formatCurrency(r.value) : '—'}
-                        </span>
-                        {r.pl !== null ? (
-                          <span
-                            className={`nums text-[11px] ${
-                              r.pl > 0 ? 'text-positive' : r.pl < 0 ? 'text-negative' : 'text-muted'
-                            }`}
-                          >
-                            {r.pl > 0 ? '+' : r.pl < 0 ? '−' : ''}
-                            {formatCurrency(Math.abs(r.pl))}{' '}
-                            {r.plPct !== null ? `(${r.plPct.toFixed(1)}%)` : ''}
-                          </span>
+                        {expanded ? (
+                          <LotsPanel
+                            holdingId={r.h.id}
+                            currentPrice={r.price}
+                            ltTaxRatePct={settings?.effective_lt_tax_rate_pct ?? 0}
+                            stTaxRatePct={settings?.effective_st_tax_rate_pct ?? 0}
+                            currency={r.h.account?.currency ?? 'USD'}
+                            onTotalsChanged={() => router.refresh()}
+                          />
                         ) : null}
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setMode({ kind: 'edit', holding: r.h })}
-                            className="text-muted hover:text-foreground text-[11px]"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            disabled={pendingDelete}
-                            onClick={() => onDelete(r.h)}
-                            className="text-muted hover:text-negative text-[11px] disabled:opacity-50"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             );

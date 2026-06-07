@@ -13,6 +13,8 @@ export const apiError = {
   badRequest: (message = 'invalid request') =>
     NextResponse.json({ error: message }, { status: 400 }),
   notFound: () => NextResponse.json({ error: 'not_found' }, { status: 404 }),
+  conflict: (message = 'conflict') =>
+    NextResponse.json({ error: message }, { status: 409 }),
   tooManyRequests: (resetInSeconds: number) =>
     NextResponse.json(
       { error: 'rate_limited', retry_after_seconds: resetInSeconds },
