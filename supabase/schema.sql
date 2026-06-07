@@ -173,6 +173,12 @@ create table if not exists public.user_settings (
   user_id              uuid primary key references auth.users(id) on delete cascade,
   default_currency     text not null default 'USD' check (char_length(default_currency) = 3),
   inflation_assumption numeric(5,2) not null default 3.00 check (inflation_assumption >= 0 and inflation_assumption <= 50),
+  -- Effective tax rates used by the per-lot hypothetical-sale estimate
+  -- (Phase 4 part 2). 0 = not yet set; the UI hides tax estimates until
+  -- both rates are positive. Range 0-80 covers any realistic combined
+  -- federal+state+NIIT bracket without allowing nonsense values.
+  effective_lt_tax_rate_pct numeric(5,2) not null default 0 check (effective_lt_tax_rate_pct >= 0 and effective_lt_tax_rate_pct <= 80),
+  effective_st_tax_rate_pct numeric(5,2) not null default 0 check (effective_st_tax_rate_pct >= 0 and effective_st_tax_rate_pct <= 80),
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now()
 );

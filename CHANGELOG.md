@@ -6,7 +6,68 @@ The project doesn't ship a versioned package — entries are grouped by mileston
 
 ## [Unreleased]
 
-### Migration test harness — pglite
+### Phase 4 part 2 — tax lots UI + classification + tax estimates _(parked, PR #11)_
+
+> Built and reviewed but intentionally unmerged. The owner has no
+> holdings to validate the feature against yet; will merge when
+> actual tax-lot tracking starts. **Migration 0004 has NOT been
+> applied to the prod DB.** See CLAUDE.md § Parked / unmerged work.
+
+- **Added** migration `0004_user_settings_tax_rates.sql` — additive
+  columns `effective_lt_tax_rate_pct` and `effective_st_tax_rate_pct` on
+  `public.user_settings`. Both default to 0; UI hides tax estimates
+  until both are positive. CHECK constraint 0–80 covers any realistic
+  combined federal+state+NIIT bracket. Safe on populated DBs: existing
+  rows just inherit the defaults.
+- **Added** lot CRUD endpoints:
+  - `GET  /api/holdings/[id]/lots`           — list lots for a holding
+  - `POST /api/holdings/[id]/lots`           — create a lot
+  - `PATCH /api/holdings/[id]/lots/[lotId]`  — edit a lot
+  - `DELETE /api/holdings/[id]/lots/[lotId]` — remove a lot (refuses to
+    remove the last lot of a holding so the invariant stays intact)
+- **Added** user-settings API:
+  - `GET   /api/user-settings` (lazy-creates the row on first read)
+  - `PATCH /api/user-settings` (upsert + readback)
+- **Added** `src/lib/holdings/sync-totals.ts` — the canonical helper
+  every lot-mutating code path calls to recompute
+  `holdings.quantity = sum(lots.quantity)` and
+  `holdings.cost_basis = sum(lots.cost_basis)` in scaled-integer
+  arithmetic, preserving the invariant exactly without floating-point
+  drift over many edits.
+- **Added** `src/lib/derived/lots.ts` — pure classification +
+  hypothetical-sale-estimate helpers. **Honors the migration-0003
+  classification contract**: `acquired_on_estimated = true` lots
+  always classify as `needs_review` (regardless of date) and never
+  receive a tax estimate. 14 unit tests covering the contract, the
+  365-day exclusive boundary, rounding to the cent, loss/zero-gain
+  handling, and the "rate=0 → no estimate" rule.
+- **Changed** `POST /api/holdings` now also inserts the initial lot —
+  default `acquired_on = today` with `acquired_on_estimated = true`
+  unless the caller explicitly supplied a real date. Preserves the
+  invariant from day one for new holdings.
+- **Changed** `PATCH /api/holdings/[id]` — if the request changes
+  `quantity` or `cost_basis`:
+  - On a single-lot holding: mirrors the change onto the lot AND the
+    holding in the same request, then resyncs from sum(lots) as a
+    defensive check.
+  - On a multi-lot holding: returns 409 `multi_lot_holding_use_lot_endpoints`
+    so the user is directed to the lot-level UI.
+- **Added** Settings → Tax-estimate rates form. Two inputs (LT %, ST %).
+  Surfaces the "estimate only, not tax advice" disclaimer and the list
+  of unmodeled factors (wash sales, lot-selection methods, state
+  surtaxes beyond the blended rate, NIIT thresholds).
+- **Added** Portfolio holding rows get a "Lots" toggle. Expanding
+  shows per-lot classification badge (Long-term / Short-term / Needs
+  review), acquired date with "estimated" indicator, market value,
+  unrealized gain, and (when both rates are set) the per-lot tax
+  estimate. "Needs review" lots get an inline date picker CTA — saving
+  the date implicitly clears the estimated flag and triggers
+  classification.
+- **Added** `apiError.conflict(message)` for the multi-lot-holding
+  case. Joins the standing pattern of generic, hostile-reader-safe
+  error responses in `src/lib/api-error.ts`.
+
+### Migration test harness — pglite (PR #10, merged)
 
 - **Added** `@electric-sql/pglite` as a devDep — Postgres compiled to WASM,
   ~3MB. Lets us run migration safety checks against real Postgres

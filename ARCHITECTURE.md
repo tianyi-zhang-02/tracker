@@ -62,7 +62,7 @@ The exception is [`price_cache`](#price_cache) — RLS is enabled but with **no 
 | `savings_goals` | Named targets with monthly contributions and optional linked accounts. | `name`, `target_amount`, `target_date`, `monthly_contribution`, `linked_account_id` | `user_id` |
 | `holdings` | One row per (account, symbol) for brokerage / retirement / crypto. Total `quantity` and `cost_basis` are the **sum of the holding's lots** (see [`holding_lots`](#holding_lots) below). | `account_id`, `symbol`, `asset_type`, `quantity`, `cost_basis` | `user_id` |
 | `holding_lots` | Per-acquisition lots that roll up into a holding. Each lot has its own `acquired_on` date which drives long-term vs short-term tax classification. | `holding_id`, `quantity`, `cost_basis`, `acquired_on`, `acquired_on_estimated` | `user_id` |
-| `user_settings` | Per-user preferences (default currency, inflation assumption, etc.). One row per user. | `default_currency`, etc. | `user_id` |
+| `user_settings` | Per-user preferences. Phase 4 part 2 added `effective_lt_tax_rate_pct` + `effective_st_tax_rate_pct` for the per-lot tax estimate. One row per user, lazy-created on first read. | `default_currency`, `inflation_assumption`, `effective_lt_tax_rate_pct`, `effective_st_tax_rate_pct` | `user_id` |
 | `scenarios` | Saved wealth-simulator scenarios. `assumptions` is a `jsonb` blob validated with the same zod schema the engine reads. | `name`, `assumptions` (jsonb) | `user_id` |
 
 ### Server-only tables
@@ -80,9 +80,9 @@ Phase 4 introduced `holding_lots` so a single holding can be sliced into multipl
 > `sum(lot.cost_basis) = h.cost_basis`
 > **to the cent.**
 
-The 0003 migration enforces this invariant at apply time — it RAISES and rolls back the entire transaction if any holding's lot sums don't match. The application maintains the invariant going forward (work for the next phase): when the user adds, edits, or removes a lot, the parent holding's totals must be updated in the same transaction.
+The 0003 migration enforces this invariant at apply time — it RAISES and rolls back the entire transaction if any holding's lot sums don't match. The application maintains the invariant going forward (work delivered in Phase 4 part 2): every code path that mutates `holding_lots` calls [`syncHoldingTotals`](src/lib/holdings/sync-totals.ts), which recomputes the holding columns from `sum(lots)` in scaled-integer arithmetic. The single existing `PATCH /api/holdings/[id]` endpoint that allows direct edits of `quantity` / `cost_basis` now refuses multi-lot holdings (409 `multi_lot_holding_use_lot_endpoints`) and mirrors single-lot edits onto the lot in the same request.
 
-For all current reads (portfolio value, dashboard net worth via [`computeNetWorth`](#canonical-net-worth-helper), CSV export), the existing `holdings.quantity` and `holdings.cost_basis` columns are authoritative. Lot data is purely additive — nothing breaks if the application is unaware of lots.
+For all current reads (portfolio value, dashboard net worth via [`computeNetWorth`](#canonical-net-worth-helper), CSV export), the existing `holdings.quantity` and `holdings.cost_basis` columns remain authoritative. Lot data is additive — code that doesn't care about lots can keep reading the holding columns as before.
 
 #### Classification contract — `acquired_on_estimated`
 

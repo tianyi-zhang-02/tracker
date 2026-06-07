@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getAuthedUser } from '@/lib/supabase/server';
 
 import SignOutButton from './sign-out-button';
+import TaxRatesForm from './tax-rates-form';
 
 export default async function SettingsPage() {
   const user = await getAuthedUser();
@@ -49,6 +50,13 @@ export default async function SettingsPage() {
             </Link>
           </li>
         </ul>
+      </section>
+
+      <section className="space-y-2">
+        <p className="text-muted text-[10px] tracking-[0.18em] uppercase">
+          Tax-estimate rates
+        </p>
+        <TaxRatesForm />
       </section>
 
       <section className="space-y-2">

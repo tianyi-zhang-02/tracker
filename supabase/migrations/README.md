@@ -32,6 +32,17 @@ exists` / `drop policy if exists`), so re-running is safe.
    `acquired_on_estimated = true` so the UI can render it as a
    placeholder until the user supplies a real acquisition date.
 
+4. **`0004_user_settings_tax_rates.sql`** — Adds
+   `effective_lt_tax_rate_pct` and `effective_st_tax_rate_pct` columns
+   to `public.user_settings` for the per-lot hypothetical-sale estimate
+   (Phase 4 part 2). Both default to 0; the UI hides tax estimates
+   until both are positive. Safe on populated DBs — existing
+   `user_settings` rows just get the default values for the new
+   columns. No backfill needed.
+
+   > **Safe to run with no precondition.** Pure column additions with
+   > defaults. No safety check / rollback-test sibling needed.
+
    > **Take an encrypted backup from /settings/export before applying
    > this migration.** Per project rule, migrations are forward-only and
    > the only safe rollback is restoring from a backup.
