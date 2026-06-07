@@ -96,6 +96,43 @@ create policy "holdings: owner full access" on public.holdings
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ============================================================================
+-- holding_lots (Phase 4 — tax-lot accounting)
+-- A holding's total quantity and cost basis are the SUM of its lots.
+-- Each lot represents one acquisition event with its own acquired_on date,
+-- which drives long-term vs short-term classification (Phase 4+ work).
+-- ============================================================================
+create table if not exists public.holding_lots (
+  id                    uuid primary key default gen_random_uuid(),
+  user_id               uuid not null references auth.users(id) on delete cascade,
+  holding_id            uuid not null references public.holdings(id) on delete cascade,
+  -- Match the precision of holdings exactly.
+  quantity              numeric(18,8) not null check (quantity >= 0),
+  cost_basis            numeric(14,2) not null check (cost_basis >= 0),
+  acquired_on           date not null,
+  acquired_on_estimated boolean not null default false,
+  created_at            timestamptz not null default now()
+);
+create index if not exists holding_lots_user_id_idx    on public.holding_lots(user_id);
+create index if not exists holding_lots_holding_id_idx on public.holding_lots(holding_id);
+
+alter table public.holding_lots enable row level security;
+drop policy if exists "holding_lots: owner full access" on public.holding_lots;
+create policy "holding_lots: owner full access" on public.holding_lots
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Pin the classification contract for `acquired_on_estimated` into the catalog
+-- so it travels with the DB. See supabase/migrations/0003_holding_lots.sql
+-- header for the full contract — short version: code that classifies lots
+-- as long-term / short-term MUST check `acquired_on_estimated` first and treat
+-- true lots as "needs review" rather than using `acquired_on` as input.
+comment on table public.holding_lots is
+  'Per-acquisition lots that roll up into a holding. sum(quantity) = holdings.quantity and sum(cost_basis) = holdings.cost_basis to the cent.';
+comment on column public.holding_lots.acquired_on is
+  'The date the lot was opened. For lots with acquired_on_estimated = true, this is a placeholder and MUST NOT be used for LT/ST classification.';
+comment on column public.holding_lots.acquired_on_estimated is
+  'true = acquired_on is a placeholder, not user-confirmed. Classification code must check this flag first.';
+
+-- ============================================================================
 -- account_snapshots
 -- ============================================================================
 create table if not exists public.account_snapshots (

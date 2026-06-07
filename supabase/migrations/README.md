@@ -26,6 +26,23 @@ exists` / `drop policy if exists`), so re-running is safe.
    > could call a SECURITY DEFINER function and gain elevated privileges.
    > Run it.
 
+3. **`0003_holding_lots.sql`** — Adds `public.holding_lots` (RLS, owner-
+   only policy) for tax-lot accounting (Phase 4). Backfills one lot per
+   existing holding with `acquired_on = holdings.created_at::date` and
+   `acquired_on_estimated = true` so the UI can render it as a
+   placeholder until the user supplies a real acquisition date.
+
+   > **Take an encrypted backup from /settings/export before applying
+   > this migration.** Per project rule, migrations are forward-only and
+   > the only safe rollback is restoring from a backup.
+
+   The migration is wrapped in an explicit `begin; ... commit;` block
+   with a transactional safety check at the end: it raises an exception
+   if any holding's lot sums don't equal the holding total to the cent,
+   which rolls back the entire transaction. **You cannot end up in a
+   half-applied state.** Re-running the migration is a no-op (the
+   backfill skips holdings that already have at least one lot).
+
 ## Adding a new migration
 
 - Name: `NNNN_short_description.sql` where `NNNN` is the next zero-padded
