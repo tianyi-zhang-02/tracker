@@ -6,6 +6,22 @@ The project doesn't ship a versioned package — entries are grouped by mileston
 
 ## [Unreleased]
 
+### Migration test harness — pglite
+
+- **Added** `@electric-sql/pglite` as a devDep — Postgres compiled to WASM,
+  ~3MB. Lets us run migration safety checks against real Postgres
+  semantics in CI / locally without needing a Postgres daemon or Docker.
+- **Added** `supabase/migrations/0003_holding_lots.rollback-test.mjs` —
+  pins the four rollback verification cases that were run by hand during
+  PR #9 review (GOOD case + three BAD cases including the 1e-8 precision
+  boundary). Run with `npm run test:migrations`. Exits non-zero if any
+  case behaves unexpectedly.
+- **Added** `npm run test:migrations` script.
+- **Convention**: future migrations that ship a safety check should
+  include a sibling `NNNN_xxx.rollback-test.mjs` and extend the
+  `test:migrations` script (or chain via `&&`) to invoke it. Documented
+  in `supabase/migrations/README.md`.
+
 ### Phase 4 — tax lots (data model only)
 
 - **Added** `public.holding_lots` table. One acquisition-event per row,
